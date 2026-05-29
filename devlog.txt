@@ -1,0 +1,16 @@
+$ next dev
+⚠ Port 3000 is in use by process 15280, using available port 3001 instead.
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://10.27.222.65:3001
+✓ Ready in 832ms
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          15280
+- Dir:          D:\Projects\AlgoLens\frontend
+- Log:          .next\dev\logs\next-development.log
+
+Run taskkill /PID 15280 /F to stop it.
+[?25h
+error: script "dev" exited with code 1
