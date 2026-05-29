@@ -131,11 +131,14 @@ export default function MonacoEditor() {
     }
   }, [])
 
-  // Language switching via custom event.
+  // Language switching via custom event. Loads that language's default code.
+  // (When a file is selected, a follow-up 'algolens:set-content' event overrides
+  // this with the file's actual content — dispatched synchronously after, so it wins.)
   useEffect(() => {
     const handler = (e: Event) => {
       const lang = (e as CustomEvent).detail.language as string
       setLanguage(lang)
+      editorRef.current?.setValue(DEFAULT_CODE[lang] ?? '')
     }
     window.addEventListener('algolens:set-language', handler)
     return () => window.removeEventListener('algolens:set-language', handler)
@@ -170,7 +173,19 @@ export default function MonacoEditor() {
     return () => window.removeEventListener('algolens:toggle-wordwrap', handler)
   }, [])
 
-  // Imperatively update model language + content when language changes.
+  // Load file content imperatively when a file is selected in the explorer.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const content = (e as CustomEvent).detail.content as string
+      editorRef.current?.setValue(content)
+    }
+    window.addEventListener('algolens:set-content', handler)
+    return () => window.removeEventListener('algolens:set-content', handler)
+  }, [])
+
+  // Keep the model's syntax language in sync. Content is driven imperatively
+  // by the set-language / set-content handlers, so we do NOT setValue here
+  // (that would overwrite file content loaded from the explorer).
   useEffect(() => {
     const editor = editorRef.current
     const monaco = monacoRef.current
@@ -178,7 +193,6 @@ export default function MonacoEditor() {
     const model = editor.getModel()
     if (model) {
       monaco.editor.setModelLanguage(model, language)
-      editor.setValue(DEFAULT_CODE[language] ?? '')
     }
   }, [language])
 
@@ -243,7 +257,7 @@ export default function MonacoEditor() {
         width="100%"
         language={language}
         theme="vs-dark"
-        value={DEFAULT_CODE[language]}
+        defaultValue={DEFAULT_CODE.python}
         options={monacoOptions}
         onMount={handleMount}
         beforeMount={handleBeforeMount}

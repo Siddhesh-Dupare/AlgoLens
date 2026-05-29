@@ -20,3 +20,20 @@ body {
   width: 100%;
   height: 100%;
 }
+
+.file-explorer-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.file-explorer-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-explorer-scroll::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 3px;
+}
+
+.file-explorer-scroll::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}
