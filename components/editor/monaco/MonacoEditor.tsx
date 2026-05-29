@@ -29,6 +29,11 @@ export default function MonacoEditor() {
     editorRef.current = editor
     monacoRef.current = monaco
 
+    // Toggle the terminal even when Monaco has keyboard focus.
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Backquote, () => {
+      window.dispatchEvent(new CustomEvent('algolens:toggle-terminal'))
+    })
+
     const container = containerRef.current
     if (!container) return
 
@@ -91,6 +96,13 @@ export default function MonacoEditor() {
     }
     window.addEventListener('algolens:set-content', handler)
     return () => window.removeEventListener('algolens:set-content', handler)
+  }, [])
+
+  // Relayout when the surrounding layout changes (e.g. terminal opens/resizes).
+  useEffect(() => {
+    const handler = () => editorRef.current?.layout()
+    window.addEventListener('algolens:relayout', handler)
+    return () => window.removeEventListener('algolens:relayout', handler)
   }, [])
 
   // Keep the model's syntax language in sync with the language state.

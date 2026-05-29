@@ -36,6 +36,9 @@ function handleMenuAction(id: string): void {
         new CustomEvent('algolens:zoom', { detail: { direction: 'reset' } })
       )
       break
+    case 'view-terminal':
+      window.dispatchEvent(new CustomEvent('algolens:toggle-terminal'))
+      break
     case 'view-toggle-minimap':
       window.dispatchEvent(new CustomEvent('algolens:toggle-minimap'))
       break
