@@ -11,99 +11,12 @@ const MonacoEditorLib = dynamic(() => import('@monaco-editor/react'), {
   ),
 })
 
-const DEFAULT_CODE: Record<string, string> = {
-  python: `def bubble_sort(arr):
-    n = len(arr)
-    for i in range(n):
-        for j in range(0, n - i - 1):
-            if arr[j] > arr[j + 1]:
-                arr[j], arr[j + 1] = arr[j + 1], arr[j]
-    return arr
-
-
-data = [64, 34, 25, 12, 22, 11, 90]
-print(bubble_sort(data))
-`,
-  javascript: `function bubbleSort(arr) {
-  const n = arr.length;
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n - i - 1; j++) {
-      if (arr[j] > arr[j + 1]) {
-        [arr[j], arr[j + 1]] = [arr[j + 1], arr[j]];
-      }
-    }
-  }
-  return arr;
-}
-
-const data = [64, 34, 25, 12, 22, 11, 90];
-console.log(bubbleSort(data));
-`,
-  cpp: `#include <iostream>
-#include <vector>
-using namespace std;
-
-void bubbleSort(vector<int>& arr) {
-    int n = arr.size();
-    for (int i = 0; i < n; i++)
-        for (int j = 0; j < n - i - 1; j++)
-            if (arr[j] > arr[j + 1])
-                swap(arr[j], arr[j + 1]);
-}
-
-int main() {
-    vector<int> data = {64, 34, 25, 12, 22, 11, 90};
-    bubbleSort(data);
-    for (int x : data) cout << x << " ";
-    return 0;
-}
-`,
-  c: `#include <stdio.h>
-
-void bubbleSort(int arr[], int n) {
-    for (int i = 0; i < n; i++)
-        for (int j = 0; j < n - i - 1; j++)
-            if (arr[j] > arr[j + 1]) {
-                int temp = arr[j];
-                arr[j] = arr[j + 1];
-                arr[j + 1] = temp;
-            }
-}
-
-int main() {
-    int data[] = {64, 34, 25, 12, 22, 11, 90};
-    bubbleSort(data, 7);
-    for (int i = 0; i < 7; i++) printf("%d ", data[i]);
-    return 0;
-}
-`,
-  java: `public class BubbleSort {
-    static void bubbleSort(int[] arr) {
-        int n = arr.length;
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n - i - 1; j++)
-                if (arr[j] > arr[j + 1]) {
-                    int temp = arr[j];
-                    arr[j] = arr[j + 1];
-                    arr[j + 1] = temp;
-                }
-    }
-
-    public static void main(String[] args) {
-        int[] data = {64, 34, 25, 12, 22, 11, 90};
-        bubbleSort(data);
-        for (int x : data) System.out.print(x + " ");
-    }
-}
-`,
-}
-
 export default function MonacoEditor() {
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   const monacoRef = useRef<Parameters<OnMount>[1] | null>(null)
 
-  const [language, setLanguage] = useState<string>('python')
+  const [language, setLanguage] = useState<string>('plaintext')
   const [fontSize, setFontSize] = useState<number>(14)
   const [minimapEnabled, setMinimapEnabled] = useState<boolean>(false)
   const [wordWrap, setWordWrap] = useState<'off' | 'on'>('off')
@@ -131,14 +44,11 @@ export default function MonacoEditor() {
     }
   }, [])
 
-  // Language switching via custom event. Loads that language's default code.
-  // (When a file is selected, a follow-up 'algolens:set-content' event overrides
-  // this with the file's actual content — dispatched synchronously after, so it wins.)
+  // Language switching via custom event (just sets the syntax language).
   useEffect(() => {
     const handler = (e: Event) => {
       const lang = (e as CustomEvent).detail.language as string
       setLanguage(lang)
-      editorRef.current?.setValue(DEFAULT_CODE[lang] ?? '')
     }
     window.addEventListener('algolens:set-language', handler)
     return () => window.removeEventListener('algolens:set-language', handler)
@@ -173,7 +83,7 @@ export default function MonacoEditor() {
     return () => window.removeEventListener('algolens:toggle-wordwrap', handler)
   }, [])
 
-  // Load file content imperatively when a file is selected in the explorer.
+  // Load file content imperatively when a file/tab is selected.
   useEffect(() => {
     const handler = (e: Event) => {
       const content = (e as CustomEvent).detail.content as string
@@ -183,9 +93,7 @@ export default function MonacoEditor() {
     return () => window.removeEventListener('algolens:set-content', handler)
   }, [])
 
-  // Keep the model's syntax language in sync. Content is driven imperatively
-  // by the set-language / set-content handlers, so we do NOT setValue here
-  // (that would overwrite file content loaded from the explorer).
+  // Keep the model's syntax language in sync with the language state.
   useEffect(() => {
     const editor = editorRef.current
     const monaco = monacoRef.current
@@ -257,7 +165,7 @@ export default function MonacoEditor() {
         width="100%"
         language={language}
         theme="vs-dark"
-        defaultValue={DEFAULT_CODE.python}
+        defaultValue=""
         options={monacoOptions}
         onMount={handleMount}
         beforeMount={handleBeforeMount}

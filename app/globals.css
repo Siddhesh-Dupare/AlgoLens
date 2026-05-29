@@ -37,3 +37,17 @@ body {
 .file-explorer-scroll::-webkit-scrollbar-thumb:hover {
   background: #555555;
 }
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tabs-no-scrollbar {
+  scrollbar-width: none;
+}
+
+.tabs-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -1,11 +1,16 @@
 export type FileLanguage =
   | 'python'
   | 'javascript'
+  | 'typescript'
   | 'cpp'
   | 'c'
   | 'java'
   | 'markdown'
+  | 'json'
+  | 'html'
+  | 'css'
   | 'text'
+  | 'unknown'
 
 export type FileNodeType = 'file' | 'folder'
 
@@ -14,11 +19,17 @@ export interface FileNode {
   name: string
   type: FileNodeType
   language?: FileLanguage
-  content?: string
+  handle?: FileSystemFileHandle
+  dirHandle?: FileSystemDirectoryHandle
   children?: FileNode[]
+  isLoaded?: boolean
 }
 
-export interface ExplorerState {
-  selectedId: string | null
-  expandedIds: Set<string>
+export interface OpenedTab {
+  id: string
+  name: string
+  language: FileLanguage
+  content: string
+  handle: FileSystemFileHandle
+  isDirty: boolean
 }
