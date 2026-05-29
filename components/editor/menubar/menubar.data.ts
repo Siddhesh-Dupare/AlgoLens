@@ -47,7 +47,7 @@ export const MENU_DATA: TopLevelMenu[] = [
     items: [
       { id: 'view-command-palette', type: 'action', label: 'Command Palette', shortcut: 'Ctrl+Shift+P' },
       { id: 'view-sep-1', type: 'separator' },
-      { id: 'view-explorer', type: 'action', label: 'Explorer', shortcut: 'Ctrl+Shift+E', disabled: true },
+      { id: 'view-explorer', type: 'action', label: 'Explorer', shortcut: 'Ctrl+Shift+E', disabled: false },
       { id: 'view-terminal', type: 'action', label: 'Terminal', shortcut: 'Ctrl+`', disabled: false },
       { id: 'view-sep-2', type: 'separator' },
       { id: 'view-zoom-in', type: 'action', label: 'Zoom In', shortcut: 'Ctrl+=' },

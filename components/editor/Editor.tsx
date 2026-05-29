@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import MenuBar from './menubar/MenuBar'
 import MonacoEditor from './monaco/MonacoEditor'
 import FileExplorer from './explorer/FileExplorer'
 import EditorTabs from './tabs/EditorTabs'
 import Terminal from './terminal/Terminal'
 import type { TerminalHandle } from './terminal/Terminal'
+import StatusBar from './statusbar/StatusBar'
 import type { FileNode } from './explorer/explorer.types'
 import type { TabItem } from './tabs/tabs.types'
 import { readFileContent, getMonacoLanguage } from './explorer/filesystemUtils'
@@ -69,47 +70,89 @@ export default function Editor() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [explorerWidth, setExplorerWidth] = useState(240)
 
+  // Panel visibility
+  const [isExplorerVisible, setIsExplorerVisible] = useState(true)
+  const [isEditorVisible, setIsEditorVisible] = useState(true)
   const [isTerminalVisible, setIsTerminalVisible] = useState(false)
   const [terminalHeight, setTerminalHeight] = useState(260)
   const terminalRef = useRef<TerminalHandle>(null)
-  const lastToggleRef = useRef(0)
+  const lastTerminalToggleRef = useRef(0)
 
-  // Terminal toggle: Ctrl+` and the 'algolens:toggle-terminal' custom event
-  // (the menu item and Monaco's keybinding both dispatch that event). A single
-  // Ctrl+` press can reach us twice — once via the window keydown listener and
-  // once via Monaco's addCommand dispatch — so debounce to a single toggle.
+  // Status bar info
+  const [activeLanguage, setActiveLanguage] = useState('')
+  const [activeFileName, setActiveFileName] = useState('')
+  const [cursorLine, setCursorLine] = useState(1)
+  const [cursorColumn, setCursorColumn] = useState(1)
+  const [totalLines, setTotalLines] = useState(0)
+
+  const toggleExplorer = useCallback(() => setIsExplorerVisible((p) => !p), [])
+  const toggleEditor = useCallback(() => setIsEditorVisible((p) => !p), [])
+  // Terminal toggle is debounced: a single Ctrl+` can reach us twice (once via
+  // the window keydown listener, once via Monaco's addCommand dispatch).
+  const toggleTerminal = useCallback(() => {
+    const now = Date.now()
+    if (now - lastTerminalToggleRef.current < 150) return
+    lastTerminalToggleRef.current = now
+    setIsTerminalVisible((p) => !p)
+  }, [])
+
+  // Keyboard shortcuts + menu toggle events.
   useEffect(() => {
-    const toggle = () => {
-      const now = Date.now()
-      if (now - lastToggleRef.current < 150) return
-      lastToggleRef.current = now
-      setIsTerminalVisible((prev) => !prev)
-    }
+    const onToggleTerminal = () => toggleTerminal()
+    const onToggleExplorer = () => toggleExplorer()
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && (e.key === '`' || e.code === 'Backquote')) {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
         e.preventDefault()
-        toggle()
+        toggleExplorer()
+      } else if (e.ctrlKey && e.shiftKey && (e.key === 'X' || e.key === 'x')) {
+        e.preventDefault()
+        toggleEditor()
+      } else if (e.ctrlKey && (e.key === '`' || e.code === 'Backquote')) {
+        e.preventDefault()
+        toggleTerminal()
       }
     }
-    window.addEventListener('algolens:toggle-terminal', toggle)
+    window.addEventListener('algolens:toggle-terminal', onToggleTerminal)
+    window.addEventListener('algolens:toggle-explorer', onToggleExplorer)
     window.addEventListener('keydown', onKeyDown)
     return () => {
-      window.removeEventListener('algolens:toggle-terminal', toggle)
+      window.removeEventListener('algolens:toggle-terminal', onToggleTerminal)
+      window.removeEventListener('algolens:toggle-explorer', onToggleExplorer)
       window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [toggleTerminal, toggleExplorer, toggleEditor])
+
+  // Cursor position + line count from Monaco.
+  useEffect(() => {
+    const onCursor = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      setCursorLine(detail.line)
+      setCursorColumn(detail.column)
+    }
+    const onLineCount = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      setTotalLines(detail.count)
+    }
+    window.addEventListener('algolens:cursor-position', onCursor)
+    window.addEventListener('algolens:line-count', onLineCount)
+    return () => {
+      window.removeEventListener('algolens:cursor-position', onCursor)
+      window.removeEventListener('algolens:line-count', onLineCount)
     }
   }, [])
 
-  // Relayout Monaco whenever the terminal opens/closes or changes height so the
-  // editor fills the new available space (runs after DOM commit).
+  // Relayout Monaco when the surrounding layout changes so it fills the space.
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('algolens:relayout'))
-  }, [isTerminalVisible, terminalHeight])
+  }, [isTerminalVisible, terminalHeight, isExplorerVisible, isEditorVisible, explorerWidth])
 
   const handleFileSelect = async (file: FileNode) => {
     // Already open — just activate it.
     const existing = tabs.find((t) => t.id === file.id)
     if (existing) {
       setActiveTabId(existing.id)
+      setActiveLanguage(existing.language)
+      setActiveFileName(existing.name)
       dispatchContent(existing.content)
       dispatchLanguage(existing.language)
       return
@@ -134,6 +177,8 @@ export default function Editor() {
       prev.some((t) => t.id === newTab.id) ? prev : [...prev, newTab]
     )
     setActiveTabId(newTab.id)
+    setActiveLanguage(newTab.language)
+    setActiveFileName(newTab.name)
 
     dispatchContent(content)
     dispatchLanguage(newTab.language)
@@ -143,6 +188,8 @@ export default function Editor() {
     const tab = tabs.find((t) => t.id === id)
     if (!tab) return
     setActiveTabId(id)
+    setActiveLanguage(tab.language)
+    setActiveFileName(tab.name)
     dispatchContent(tab.content)
     dispatchLanguage(tab.language)
   }
@@ -157,12 +204,19 @@ export default function Editor() {
     if (activeTabId === id) {
       if (newTabs.length === 0) {
         setActiveTabId(null)
+        setActiveLanguage('')
+        setActiveFileName('')
+        setCursorLine(1)
+        setCursorColumn(1)
+        setTotalLines(0)
         dispatchContent('')
         dispatchLanguage('plaintext')
       } else {
         const newIndex = Math.max(0, index - 1)
         const nextTab = newTabs[newIndex]
         setActiveTabId(nextTab.id)
+        setActiveLanguage(nextTab.language)
+        setActiveFileName(nextTab.name)
         dispatchContent(nextTab.content)
         dispatchLanguage(nextTab.language)
       }
@@ -192,11 +246,11 @@ export default function Editor() {
     setTerminalHeight(h)
   }
 
-  const handleTerminalClose = () => {
-    setIsTerminalVisible(false)
-  }
-
   const hasTabs = tabs.length > 0
+  // Keep the editor row occupying space whenever EITHER the explorer or the
+  // editor is shown (collapsing it on `!isEditorVisible` alone would also hide
+  // the explorer, which shares this row).
+  const editorRowFlex = isExplorerVisible || isEditorVisible ? 1 : 0
 
   return (
     <div
@@ -209,12 +263,12 @@ export default function Editor() {
         background: '#1e1e1e',
       }}
     >
-      {/* Row 1: Menu bar */}
+      {/* Menu bar */}
       <div style={{ flexShrink: 0 }}>
         <MenuBar />
       </div>
 
-      {/* Row 2: Main content + terminal */}
+      {/* Main area */}
       <div
         style={{
           flex: 1,
@@ -224,60 +278,64 @@ export default function Editor() {
           overflow: 'hidden',
         }}
       >
-        {/* Top section: explorer + editor */}
+        {/* Editor row */}
         <div
           style={{
-            flex: 1,
+            flex: editorRowFlex,
             minHeight: 0,
             display: 'flex',
             flexDirection: 'row',
             overflow: 'hidden',
+            transition: 'flex 200ms ease',
           }}
         >
-          {/* Column A: File explorer */}
+          {/* Explorer */}
           <div
             style={{
-              width: explorerWidth,
+              width: isExplorerVisible ? explorerWidth : 0,
               flexShrink: 0,
               height: '100%',
-              borderRight: '1px solid #2d2d2d',
+              borderRight: isExplorerVisible ? '1px solid #2d2d2d' : 'none',
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
+              transition: 'width 200ms ease',
             }}
           >
             <FileExplorer onFileSelect={handleFileSelect} />
           </div>
 
-          {/* Resize handle */}
-          <div
-            role="separator"
-            aria-label="Resize file explorer"
-            aria-orientation="vertical"
-            onMouseDown={handleResizeMouseDown}
-            style={{
-              width: 4,
-              height: '100%',
-              cursor: 'col-resize',
-              flexShrink: 0,
-              background: 'transparent',
-              transition: 'background 150ms',
-            }}
-            onMouseEnter={(e) => {
-              ;(e.currentTarget as HTMLDivElement).style.background = '#094771'
-            }}
-            onMouseLeave={(e) => {
-              ;(e.currentTarget as HTMLDivElement).style.background = 'transparent'
-            }}
-          />
+          {/* Resize handle — only when explorer visible */}
+          {isExplorerVisible && (
+            <div
+              role="separator"
+              aria-label="Resize file explorer"
+              aria-orientation="vertical"
+              onMouseDown={handleResizeMouseDown}
+              style={{
+                width: 4,
+                height: '100%',
+                cursor: 'col-resize',
+                flexShrink: 0,
+                background: 'transparent',
+              }}
+              onMouseEnter={(e) => {
+                ;(e.currentTarget as HTMLDivElement).style.background = '#094771'
+              }}
+              onMouseLeave={(e) => {
+                ;(e.currentTarget as HTMLDivElement).style.background =
+                  'transparent'
+              }}
+            />
+          )}
 
-          {/* Column B: Tabs + Monaco */}
+          {/* Tabs + Monaco (display:none when hidden so Monaco stays mounted) */}
           <div
             style={{
               flex: 1,
               minWidth: 0,
               height: '100%',
-              display: 'flex',
+              display: isEditorVisible ? 'flex' : 'none',
               flexDirection: 'column',
               overflow: 'hidden',
             }}
@@ -318,15 +376,32 @@ export default function Editor() {
           </div>
         </div>
 
-        {/* Terminal panel (bottom of the editor area) */}
+        {/* Terminal panel */}
         <Terminal
           ref={terminalRef}
           isVisible={isTerminalVisible}
           height={terminalHeight}
           onHeightChange={handleTerminalHeightChange}
-          onClose={handleTerminalClose}
+          onClose={() => setIsTerminalVisible(false)}
         />
       </div>
+
+      {/* Status bar — always visible, always last in the column */}
+      <StatusBar
+        panelState={{
+          explorerVisible: isExplorerVisible,
+          editorVisible: isEditorVisible,
+          terminalVisible: isTerminalVisible,
+        }}
+        onToggleExplorer={toggleExplorer}
+        onToggleEditor={toggleEditor}
+        onToggleTerminal={toggleTerminal}
+        activeLanguage={activeLanguage}
+        activeFile={activeFileName}
+        lineNumber={cursorLine}
+        columnNumber={cursorColumn}
+        totalLines={totalLines}
+      />
     </div>
   )
 }

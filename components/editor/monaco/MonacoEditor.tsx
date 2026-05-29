@@ -34,6 +34,24 @@ export default function MonacoEditor() {
       window.dispatchEvent(new CustomEvent('algolens:toggle-terminal'))
     })
 
+    // Report cursor position and line count to the status bar.
+    editor.onDidChangeCursorPosition((e) => {
+      window.dispatchEvent(
+        new CustomEvent('algolens:cursor-position', {
+          detail: { line: e.position.lineNumber, column: e.position.column },
+        })
+      )
+    })
+
+    editor.onDidChangeModelContent(() => {
+      const lineCount = editor.getModel()?.getLineCount() ?? 0
+      window.dispatchEvent(
+        new CustomEvent('algolens:line-count', {
+          detail: { count: lineCount },
+        })
+      )
+    })
+
     const container = containerRef.current
     if (!container) return
 

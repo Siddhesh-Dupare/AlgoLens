@@ -36,6 +36,9 @@ function handleMenuAction(id: string): void {
         new CustomEvent('algolens:zoom', { detail: { direction: 'reset' } })
       )
       break
+    case 'view-explorer':
+      window.dispatchEvent(new CustomEvent('algolens:toggle-explorer'))
+      break
     case 'view-terminal':
       window.dispatchEvent(new CustomEvent('algolens:toggle-terminal'))
       break

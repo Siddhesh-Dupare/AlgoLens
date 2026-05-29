@@ -51,3 +51,8 @@ body {
 .tabs-no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+.status-bar-toggle-active {
+  background: #37373d;
+  color: #cccccc;
+}
