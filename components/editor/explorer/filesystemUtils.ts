@@ -192,7 +192,7 @@ export async function openFolder(): Promise<{
   children: FileNode[]
 } | null> {
   try {
-    const dirHandle = await window.showDirectoryPicker({ mode: 'read' })
+    const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
     const children = await readDirectoryRecursive(dirHandle, dirHandle.name, 0)
     return {
       name: dirHandle.name,

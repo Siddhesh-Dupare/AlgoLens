@@ -54,6 +54,11 @@ export default function MonacoEditor() {
       window.dispatchEvent(new CustomEvent('algolens:play-through'))
     })
 
+    // Save (Ctrl/Cmd+S) even when Monaco has focus.
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      window.dispatchEvent(new CustomEvent('algolens:save'))
+    })
+
     // Report cursor position and line count to the status bar.
     editor.onDidChangeCursorPosition((e) => {
       window.dispatchEvent(
@@ -63,11 +68,19 @@ export default function MonacoEditor() {
       )
     })
 
-    editor.onDidChangeModelContent(() => {
+    editor.onDidChangeModelContent((e) => {
       const lineCount = editor.getModel()?.getLineCount() ?? 0
       window.dispatchEvent(
         new CustomEvent('algolens:line-count', {
           detail: { count: lineCount },
+        })
+      )
+      // isFlush is true only for programmatic setValue (file open / tab switch /
+      // save) — not user typing. Only real edits should mark a tab dirty.
+      if (e.isFlush) return
+      window.dispatchEvent(
+        new CustomEvent('algolens:content-changed', {
+          detail: { content: editor.getValue() },
         })
       )
     })

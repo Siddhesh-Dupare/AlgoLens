@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import MenuBar from './menubar/MenuBar'
 import MonacoEditor from './monaco/MonacoEditor'
 import FileExplorer from './explorer/FileExplorer'
@@ -203,6 +203,64 @@ export default function Editor() {
     )
   }, [])
 
+  // ---- File save / dirty tracking -------------------------------------------
+
+  // Mirror user edits into the active tab and recompute its dirty flag.
+  const handleEditorChange = useCallback(
+    (value: string) => {
+      if (!activeTabId) return
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId
+            ? { ...t, content: value, isDirty: value !== t.savedContent }
+            : t
+        )
+      )
+    },
+    [activeTabId]
+  )
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const value = (e as CustomEvent).detail.content as string
+      handleEditorChange(value)
+    }
+    window.addEventListener('algolens:content-changed', handler)
+    return () => window.removeEventListener('algolens:content-changed', handler)
+  }, [handleEditorChange])
+
+  const saveActiveFile = useCallback(async () => {
+    if (!activeTabId) return
+    const tab = tabs.find((t) => t.id === activeTabId)
+    if (!tab || !tab.handle) return
+
+    try {
+      const writable = await tab.handle.createWritable()
+      await writable.write(tab.content)
+      await writable.close()
+
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId
+            ? { ...t, isDirty: false, savedContent: t.content }
+            : t
+        )
+      )
+      terminalRef.current?.addLine('success', `Saved ${tab.name}`)
+    } catch (err) {
+      terminalRef.current?.addLine(
+        'error',
+        `Failed to save ${tab.name}: ${err}`
+      )
+    }
+  }, [activeTabId, tabs])
+
+  useEffect(() => {
+    const handler = () => saveActiveFile()
+    window.addEventListener('algolens:save', handler)
+    return () => window.removeEventListener('algolens:save', handler)
+  }, [saveActiveFile])
+
   const doRun = useCallback(() => {
     if (mode === 'running') return
     setMode('running')
@@ -305,6 +363,12 @@ export default function Editor() {
       const target = e.target as HTMLElement | null
       if (target?.closest?.('.monaco-editor')) return // Monaco will handle it
 
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('algolens:save'))
+        return
+      }
+
       let eventName: string | null = null
       if (e.key === 'F5') eventName = e.shiftKey ? 'algolens:stop' : 'algolens:run'
       else if (e.key === 'F9') eventName = 'algolens:debug'
@@ -348,6 +412,7 @@ export default function Editor() {
       content,
       handle: file.handle,
       isDirty: false,
+      savedContent: content,
     }
 
     // Dedup atomically against the latest state: react-arborist's onSelect can
@@ -377,6 +442,14 @@ export default function Editor() {
   const handleTabClose = (id: string) => {
     const index = tabs.findIndex((t) => t.id === id)
     if (index === -1) return
+
+    const closing = tabs[index]
+    if (closing.isDirty) {
+      const confirmed = window.confirm(
+        `${closing.name} has unsaved changes.\n\nDiscard changes?`
+      )
+      if (!confirmed) return
+    }
 
     const newTabs = tabs.filter((t) => t.id !== id)
     setTabs(newTabs)
@@ -426,6 +499,40 @@ export default function Editor() {
     setTerminalHeight(h)
   }
 
+  // Breadcrumb derived from the active tab's id (root/segments/.../file).
+  const activeBreadcrumb = useMemo(() => {
+    const tab = activeTabId ? tabs.find((t) => t.id === activeTabId) : undefined
+    if (!tab) return { rootName: null, filePath: null, fileName: null }
+
+    const parts = tab.id.split('/')
+    if (parts.length === 1) {
+      return { rootName: null, filePath: null, fileName: tab.name }
+    }
+    if (parts.length === 2) {
+      return { rootName: parts[0], filePath: null, fileName: tab.name }
+    }
+    return {
+      rootName: parts[0],
+      filePath: parts.slice(1, -1).join('/'),
+      fileName: tab.name,
+    }
+  }, [activeTabId, tabs])
+
+  const activeTabIsDirty = useMemo(() => {
+    if (!activeTabId) return false
+    return tabs.find((t) => t.id === activeTabId)?.isDirty ?? false
+  }, [activeTabId, tabs])
+
+  // Window title reflects the active file and its dirty state (VS Code style).
+  useEffect(() => {
+    const tab = activeTabId ? tabs.find((t) => t.id === activeTabId) : undefined
+    if (!tab) {
+      document.title = 'AlgoLens'
+      return
+    }
+    document.title = `${tab.isDirty ? '● ' : ''}${tab.name} — AlgoLens`
+  }, [activeTabId, tabs])
+
   const hasTabs = tabs.length > 0
   // Keep the editor row occupying space whenever EITHER the explorer or the
   // editor is shown (collapsing it on `!isEditorVisible` alone would also hide
@@ -454,6 +561,8 @@ export default function Editor() {
         language={currentLanguage}
         stepState={stepState}
         hasActiveFile={tabs.length > 0}
+        breadcrumb={activeBreadcrumb}
+        activeTabIsDirty={activeTabIsDirty}
         onLanguageChange={handleLanguageChange}
         onRun={runDispatch}
         onDebug={debugDispatch}

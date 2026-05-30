@@ -7,6 +7,7 @@ import ToolbarLanguageSelector from './ToolbarLanguageSelector'
 import ToolbarStepCounter from './ToolbarStepCounter'
 import ToolbarRunButton from './ToolbarRunButton'
 import ToolbarDebugButton from './ToolbarDebugButton'
+import ToolbarBreadcrumb from './ToolbarBreadcrumb'
 import type { ToolbarMode, SupportedLanguage, StepState } from './toolbar.types'
 
 interface EditorToolbarProps {
@@ -14,6 +15,12 @@ interface EditorToolbarProps {
   language: SupportedLanguage
   stepState: StepState
   hasActiveFile: boolean
+  breadcrumb: {
+    rootName: string | null
+    filePath: string | null
+    fileName: string | null
+  }
+  activeTabIsDirty: boolean
   onLanguageChange: (lang: SupportedLanguage) => void
   onRun: () => void
   onDebug: () => void
@@ -28,6 +35,8 @@ export default function EditorToolbar({
   language,
   stepState,
   hasActiveFile,
+  breadcrumb,
+  activeTabIsDirty,
   onLanguageChange,
   onRun,
   onDebug,
@@ -126,8 +135,13 @@ export default function EditorToolbar({
         mode={mode}
       />
 
-      {/* RIGHT */}
-      <div style={{ flex: 1 }} />
+      {/* MIDDLE: breadcrumb (takes the flexible space, pushing settings right) */}
+      <ToolbarBreadcrumb
+        rootName={breadcrumb.rootName}
+        filePath={breadcrumb.filePath}
+        fileName={breadcrumb.fileName}
+        isDirty={activeTabIsDirty}
+      />
 
       <ToolbarDivider />
 

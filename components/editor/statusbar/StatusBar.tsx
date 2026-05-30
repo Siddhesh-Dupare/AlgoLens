@@ -14,6 +14,7 @@ import type { ReactNode } from 'react'
 import StatusBarItem from './StatusBarItem'
 import StatusBarToggle from './StatusBarToggle'
 import type { StatusBarItemData, PanelToggleState } from './statusbar.types'
+import { getLanguageDotColor } from './statusbar.types'
 
 type StatusVariant = 'default' | 'info' | 'success' | 'warning' | 'error'
 
@@ -78,17 +79,6 @@ const LANGUAGE_NAMES: Record<string, string> = {
   unknown: 'Plain Text',
 }
 
-const LANGUAGE_COLORS: Record<string, string> = {
-  python: '#3b8eea',
-  javascript: '#f1c40f',
-  typescript: '#3b8eea',
-  cpp: '#9b59b6',
-  c: '#8e44ad',
-  java: '#e74c3c',
-  markdown: '#4ecdc4',
-  json: '#f39c12',
-}
-
 function LanguageDot({ color }: { color: string }) {
   return (
     <span
@@ -127,21 +117,18 @@ export default function StatusBar({
     variant: statusVariant,
   })
 
-  // 2. Language indicator
-  if (activeLanguage && activeLanguage !== 'unknown') {
-    const displayName = LANGUAGE_NAMES[activeLanguage] ?? activeLanguage
-    const dotColor = LANGUAGE_COLORS[activeLanguage] ?? '#7f8c8d'
+  // 2. Language indicator — always shows a colored dot (gray when unknown).
+  {
+    const hasLanguage =
+      Boolean(activeLanguage) && activeLanguage !== 'unknown'
+    const displayName = activeLanguage
+      ? LANGUAGE_NAMES[activeLanguage] ?? activeLanguage
+      : 'Plain Text'
     leftItems.push({
       id: 'language',
       label: displayName,
-      icon: <LanguageDot color={dotColor} />,
-      variant: 'info',
-    })
-  } else {
-    leftItems.push({
-      id: 'language',
-      label: 'Plain Text',
-      variant: 'default',
+      icon: <LanguageDot color={getLanguageDotColor(activeLanguage ?? '')} />,
+      variant: hasLanguage ? 'info' : 'default',
     })
   }
 

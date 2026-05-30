@@ -95,17 +95,31 @@ export default function EditorTab({
 
       {tab.isDirty ? (
         <span
+          role="button"
+          aria-label="Unsaved changes — click to save"
+          title="Unsaved changes — click to save"
+          onClick={(e) => {
+            e.stopPropagation()
+            window.dispatchEvent(new CustomEvent('algolens:save'))
+          }}
           style={{
             width: 16,
             height: 16,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 10,
-            color: '#ffffff',
+            cursor: 'pointer',
+            flexShrink: 0,
           }}
         >
-          ●
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#cccccc',
+            }}
+          />
         </span>
       ) : (
         <button
