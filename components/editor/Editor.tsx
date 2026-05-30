@@ -17,6 +17,9 @@ import type {
 import type { FileNode } from './explorer/explorer.types'
 import type { TabItem } from './tabs/tabs.types'
 import { readFileContent, getMonacoLanguage } from './explorer/filesystemUtils'
+import { executionClient } from '@/lib/executionClient'
+import type { TraceFrame as ServerTraceFrame } from '@/lib/executionTypes'
+import { useTraceStore } from '@/store/useTraceStore'
 
 type StatusVariant = 'default' | 'info' | 'success' | 'warning' | 'error'
 
@@ -93,6 +96,8 @@ export default function Editor() {
   const [terminalHeight, setTerminalHeight] = useState(260)
   const terminalRef = useRef<TerminalHandle>(null)
   const lastTerminalToggleRef = useRef(0)
+  const pendingFrames = useRef<ServerTraceFrame[]>([])
+  const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Status bar info
   const [activeLanguage, setActiveLanguage] = useState('')
@@ -304,73 +309,212 @@ export default function Editor() {
     return () => window.removeEventListener('algolens:file-deleted', handler)
   }, [])
 
+  // Connect to the execution server and wire streaming callbacks.
+  useEffect(() => {
+    executionClient.connect()
+    executionClient.setCallbacks({
+      onReady: () => {
+        setStatusLabel('Ready')
+        setStatusVariant('success')
+        terminalRef.current?.addLine(
+          'system',
+          '[AlgoLens] Execution server connected.'
+        )
+      },
+      onOutput: (line) => {
+        terminalRef.current?.addLine(
+          line.stream === 'stderr' ? 'error' : 'output',
+          line.text
+        )
+      },
+      onFrame: (frame) => {
+        pendingFrames.current.push(frame)
+        window.dispatchEvent(
+          new CustomEvent('algolens:executing-line', {
+            detail: { line: frame.lineNumber },
+          })
+        )
+      },
+      onComplete: (result) => {
+        if (result.exitCode === 0) {
+          setStatusLabel('Exited with code 0')
+          setStatusVariant('success')
+          terminalRef.current?.addLine(
+            'success',
+            `Process exited with code 0 (${result.durationMs}ms)`
+          )
+        } else if (result.exitCode === -1) {
+          setStatusLabel('Killed')
+          setStatusVariant('warning')
+          terminalRef.current?.addLine(
+            'warning',
+            'Process killed (timeout or stopped)'
+          )
+        } else {
+          setStatusLabel(`Exited with code ${result.exitCode}`)
+          setStatusVariant('error')
+          terminalRef.current?.addLine(
+            'error',
+            `Process exited with code ${result.exitCode}`
+          )
+        }
+
+        if (result.totalFrames && result.totalFrames > 0) {
+          const frames = pendingFrames.current
+          useTraceStore.getState().setFrames(frames)
+          setMode('paused')
+          setStepState({
+            currentFrame: 0,
+            totalFrames: frames.length,
+            isPlaying: false,
+          })
+          terminalRef.current?.addLine(
+            'info',
+            `${frames.length} trace frames captured. Use Step controls.`
+          )
+          const first = frames[0]
+          if (first) {
+            window.dispatchEvent(
+              new CustomEvent('algolens:executing-line', {
+                detail: { line: first.lineNumber },
+              })
+            )
+          }
+        } else {
+          setMode('idle')
+        }
+        pendingFrames.current = []
+      },
+      onError: (err) => {
+        setStatusLabel('Error')
+        setStatusVariant('error')
+        terminalRef.current?.addLine('error', `[${err.errorType}] ${err.message}`)
+        setMode('idle')
+        pendingFrames.current = []
+      },
+    })
+
+    return () => {
+      executionClient.disconnect()
+      if (playTimerRef.current) clearInterval(playTimerRef.current)
+    }
+  }, [])
+
   const doRun = useCallback(() => {
     if (mode === 'running') return
+    if (!activeTabId) return
+    const tab = tabs.find((t) => t.id === activeTabId)
+    if (!tab) return
+
     setMode('running')
     setStatusLabel('Running...')
     setStatusVariant('info')
     setIsTerminalVisible(true)
     terminalRef.current?.clearActive()
-    terminalRef.current?.addLine('system', `Running ${currentLanguage} file...`)
-    // Temporary simulation until the execution backend exists.
-    setTimeout(() => {
+    terminalRef.current?.addLine('command', `$ Running ${tab.name}...`)
+
+    const id = executionClient.run(currentLanguage, tab.content, tab.name)
+    if (!id) {
+      terminalRef.current?.addLine(
+        'error',
+        'Execution server not connected. Start the server with:'
+      )
+      terminalRef.current?.addLine('command', 'cd algolens-server && bun run dev')
       setMode('idle')
       setStatusLabel('Ready')
       setStatusVariant('success')
-      terminalRef.current?.addLine(
-        'system',
-        'Ready for execution backend integration.'
-      )
-    }, 1500)
-  }, [mode, currentLanguage])
+    }
+  }, [mode, activeTabId, tabs, currentLanguage])
 
   const doDebug = useCallback(() => {
     if (mode === 'debugging') return
+    if (!activeTabId) return
+    const tab = tabs.find((t) => t.id === activeTabId)
+    if (!tab) return
+
     setMode('debugging')
     setStatusLabel('Debugging...')
     setStatusVariant('info')
     setIsTerminalVisible(true)
     terminalRef.current?.clearActive()
-    terminalRef.current?.addLine(
-      'system',
-      `Starting debugger for ${currentLanguage}...`
-    )
-    terminalRef.current?.addLine('system', 'Execution backend not yet connected.')
-    terminalRef.current?.addLine(
-      'info',
-      'Step controls will activate once trace is captured.'
-    )
-  }, [mode, currentLanguage])
+    pendingFrames.current = []
+    useTraceStore.getState().resetTrace()
+    window.dispatchEvent(new CustomEvent('algolens:clear-execution'))
+    terminalRef.current?.addLine('command', `$ Debugging ${tab.name}...`)
+    terminalRef.current?.addLine('info', 'Capturing trace frames...')
+
+    const id = executionClient.debug(currentLanguage, tab.content, tab.name)
+    if (!id) {
+      terminalRef.current?.addLine('error', 'Execution server not connected.')
+      setMode('idle')
+    }
+  }, [mode, activeTabId, tabs, currentLanguage])
 
   const doStop = useCallback(() => {
+    executionClient.stop()
+    if (playTimerRef.current) {
+      clearInterval(playTimerRef.current)
+      playTimerRef.current = null
+    }
     setMode('idle')
     setStepState({ currentFrame: 0, totalFrames: 0, isPlaying: false })
     terminalRef.current?.addLine('warning', 'Execution stopped.')
     setStatusLabel('Ready')
     setStatusVariant('success')
+    pendingFrames.current = []
+    window.dispatchEvent(new CustomEvent('algolens:clear-execution'))
+  }, [])
+
+  const stepTo = useCallback((newIndex: number) => {
+    const ts = useTraceStore.getState()
+    ts.jumpToFrame(newIndex)
+    const clamped = useTraceStore.getState().frameIndex
+    setStepState((prev) => ({ ...prev, currentFrame: clamped }))
+    const frame = useTraceStore.getState().frames[clamped]
+    if (frame) {
+      window.dispatchEvent(
+        new CustomEvent('algolens:executing-line', {
+          detail: { line: frame.lineNumber },
+        })
+      )
+    }
   }, [])
 
   const doStepForward = useCallback(() => {
-    if (mode !== 'debugging' && mode !== 'stepping' && mode !== 'paused') return
-    setStepState((prev) =>
-      prev.currentFrame >= prev.totalFrames
-        ? prev
-        : { ...prev, currentFrame: prev.currentFrame + 1 }
-    )
+    const ts = useTraceStore.getState()
+    if (ts.frames.length === 0) return
     setMode('stepping')
-  }, [mode])
+    stepTo(ts.frameIndex + 1)
+  }, [stepTo])
 
   const doStepBack = useCallback(() => {
-    setStepState((prev) =>
-      prev.currentFrame <= 0
-        ? prev
-        : { ...prev, currentFrame: prev.currentFrame - 1 }
-    )
-  }, [])
+    const ts = useTraceStore.getState()
+    if (ts.frames.length === 0) return
+    stepTo(ts.frameIndex - 1)
+  }, [stepTo])
 
   const doPlayThrough = useCallback(() => {
-    setStepState((prev) => ({ ...prev, isPlaying: !prev.isPlaying }))
-  }, [])
+    if (playTimerRef.current) {
+      clearInterval(playTimerRef.current)
+      playTimerRef.current = null
+      setStepState((prev) => ({ ...prev, isPlaying: false }))
+      return
+    }
+    if (useTraceStore.getState().frames.length === 0) return
+    setStepState((prev) => ({ ...prev, isPlaying: true }))
+    playTimerRef.current = setInterval(() => {
+      const ts = useTraceStore.getState()
+      if (ts.frameIndex >= ts.frames.length - 1) {
+        if (playTimerRef.current) {
+          clearInterval(playTimerRef.current)
+          playTimerRef.current = null
+        }
+        setStepState((prev) => ({ ...prev, isPlaying: false }))
+        return
+      }
+      stepTo(ts.frameIndex + 1)
+    }, 500)
+  }, [stepTo])
 
   // Listen for execution events (from toolbar buttons, keyboard, Monaco).
   useEffect(() => {

@@ -15,6 +15,7 @@ export default function MonacoEditor() {
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   const monacoRef = useRef<Parameters<OnMount>[1] | null>(null)
+  const execDecorationsRef = useRef<string[]>([])
 
   const [language, setLanguage] = useState<string>('plaintext')
   const [fontSize, setFontSize] = useState<number>(14)
@@ -224,6 +225,45 @@ export default function MonacoEditor() {
     const handler = () => editorRef.current?.layout()
     window.addEventListener('algolens:relayout', handler)
     return () => window.removeEventListener('algolens:relayout', handler)
+  }, [])
+
+  // Move the executing-line arrow during debug (real-time capture + stepping).
+  useEffect(() => {
+    const onLine = (e: Event) => {
+      const line = (e as CustomEvent).detail.line as number
+      const editor = editorRef.current
+      const monaco = monacoRef.current
+      if (!editor || !monaco || !line) return
+      execDecorationsRef.current = editor.deltaDecorations(
+        execDecorationsRef.current,
+        [
+          {
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: true,
+              className: 'executing-line-highlight',
+              glyphMarginClassName: 'executing-line-glyph',
+            },
+          },
+        ]
+      )
+      editor.revealLineInCenter(line)
+    }
+    const onClear = () => {
+      const editor = editorRef.current
+      if (editor) {
+        execDecorationsRef.current = editor.deltaDecorations(
+          execDecorationsRef.current,
+          []
+        )
+      }
+    }
+    window.addEventListener('algolens:executing-line', onLine)
+    window.addEventListener('algolens:clear-execution', onClear)
+    return () => {
+      window.removeEventListener('algolens:executing-line', onLine)
+      window.removeEventListener('algolens:clear-execution', onClear)
+    }
   }, [])
 
   // Keep the model's syntax language in sync with the language state.

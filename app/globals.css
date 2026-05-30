@@ -73,6 +73,17 @@ body {
   border-radius: 3px;
 }
 
+.executing-line-highlight {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.executing-line-glyph::before {
+  content: '▶';
+  color: #f59e0b;
+  font-size: 11px;
+  margin-left: 2px;
+}
+
 .status-bar-toggle-active {
   background: #37373d;
   color: #cccccc;
