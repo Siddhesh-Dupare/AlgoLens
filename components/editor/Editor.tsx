@@ -20,6 +20,10 @@ import { readFileContent, getMonacoLanguage } from './explorer/filesystemUtils'
 import { executionClient } from '@/lib/executionClient'
 import type { TraceFrame as ServerTraceFrame } from '@/lib/executionTypes'
 import { useTraceStore } from '@/store/useTraceStore'
+import { classify } from '@/lib/classifier'
+import { useClassifierStore } from '@/store/useClassifierStore'
+import VisualizerPanel from './visualizer/VisualizerPanel'
+import SettingsPanel from './settings/SettingsPanel'
 
 type StatusVariant = 'default' | 'info' | 'success' | 'warning' | 'error'
 
@@ -117,6 +121,32 @@ export default function Editor() {
   })
   const [currentLanguage, setCurrentLanguage] =
     useState<SupportedLanguage>('python')
+
+  // Classifier / settings
+  const [claudeApiKey, setClaudeApiKey] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('algolens_api_key') ?? ''
+    } catch {
+      return ''
+    }
+  })
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const currentLanguageRef = useRef(currentLanguage)
+  const claudeApiKeyRef = useRef(claudeApiKey)
+
+  // Keep refs in sync with the latest language / api key for event handlers.
+  useEffect(() => {
+    currentLanguageRef.current = currentLanguage
+    claudeApiKeyRef.current = claudeApiKey
+  })
+
+  // Open the settings panel when the toolbar dispatches the event.
+  useEffect(() => {
+    const onOpenSettings = () => setIsSettingsOpen(true)
+    window.addEventListener('algolens:open-settings', onOpenSettings)
+    return () =>
+      window.removeEventListener('algolens:open-settings', onOpenSettings)
+  }, [])
 
   const toggleExplorer = useCallback(() => setIsExplorerVisible((p) => !p), [])
   const toggleEditor = useCallback(() => setIsEditorVisible((p) => !p), [])
@@ -380,6 +410,43 @@ export default function Editor() {
               })
             )
           }
+
+          // Run the hybrid classifier on the captured trace.
+          const cs = useClassifierStore.getState()
+          cs.setIsClassifying(true)
+          cs.setClassifyError(null)
+          terminalRef.current?.addLine(
+            'info',
+            '[AlgoLens] Classifying algorithm...'
+          )
+          const tab = tabsRef.current.find(
+            (t) => t.id === activeTabIdRef.current
+          )
+          classify(frames, tab?.content ?? '', {
+            language: currentLanguageRef.current,
+            apiKey: claudeApiKeyRef.current,
+          })
+            .then((output) => {
+              const store = useClassifierStore.getState()
+              store.setOutput(output)
+              store.setIsClassifying(false)
+              const { label, confidence, tier } = output.classification
+              const tierLabel = tier === 0 ? 'fallback' : `Tier ${tier}`
+              terminalRef.current?.addLine(
+                'success',
+                `[AlgoLens] Detected: ${label} (${(confidence * 100).toFixed(0)}% · ${tierLabel})`
+              )
+              store.setIRFrameIndex(0)
+            })
+            .catch((err) => {
+              const store = useClassifierStore.getState()
+              store.setClassifyError(String(err?.message ?? err))
+              store.setIsClassifying(false)
+              terminalRef.current?.addLine(
+                'warning',
+                '[AlgoLens] Classification failed: ' + String(err?.message ?? err)
+              )
+            })
         } else {
           setMode('idle')
         }
@@ -439,6 +506,7 @@ export default function Editor() {
     terminalRef.current?.clearActive()
     pendingFrames.current = []
     useTraceStore.getState().resetTrace()
+    useClassifierStore.getState().reset()
     window.dispatchEvent(new CustomEvent('algolens:clear-execution'))
     terminalRef.current?.addLine('command', `$ Debugging ${tab.name}...`)
     terminalRef.current?.addLine('info', 'Capturing trace frames...')
@@ -470,6 +538,8 @@ export default function Editor() {
     ts.jumpToFrame(newIndex)
     const clamped = useTraceStore.getState().frameIndex
     setStepState((prev) => ({ ...prev, currentFrame: clamped }))
+    // Keep the (independent) classifier store's IR frame in sync.
+    useClassifierStore.getState().setIRFrameIndex(clamped)
     const frame = useTraceStore.getState().frames[clamped]
     if (frame) {
       window.dispatchEvent(
@@ -865,6 +935,19 @@ export default function Editor() {
               )}
             </div>
           </div>
+
+          {/* Visualizer panel (right side) */}
+          <div
+            style={{
+              width: 440,
+              flexShrink: 0,
+              height: '100%',
+              borderLeft: '1px solid #2d2d2d',
+              overflow: 'hidden',
+            }}
+          >
+            <VisualizerPanel />
+          </div>
         </div>
 
         {/* Terminal panel */}
@@ -895,6 +978,13 @@ export default function Editor() {
         statusLabel={statusLabel}
         statusVariant={statusVariant}
       />
+
+      {isSettingsOpen && (
+        <SettingsPanel
+          onClose={() => setIsSettingsOpen(false)}
+          onApiKeyChange={(key) => setClaudeApiKey(key)}
+        />
+      )}
     </div>
   )
 }
