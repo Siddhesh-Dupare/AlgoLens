@@ -6,10 +6,16 @@ import {
   Code2,
   CheckCircle2,
   FileCode,
+  Bug,
+  Square,
+  ChevronRight,
 } from 'lucide-react'
+import type { ReactNode } from 'react'
 import StatusBarItem from './StatusBarItem'
 import StatusBarToggle from './StatusBarToggle'
 import type { StatusBarItemData, PanelToggleState } from './statusbar.types'
+
+type StatusVariant = 'default' | 'info' | 'success' | 'warning' | 'error'
 
 interface StatusBarProps {
   panelState: PanelToggleState
@@ -21,6 +27,40 @@ interface StatusBarProps {
   lineNumber?: number
   columnNumber?: number
   totalLines?: number
+  statusLabel?: string
+  statusVariant?: StatusVariant
+}
+
+function StatusSpinner() {
+  return (
+    <span
+      style={{
+        width: 11,
+        height: 11,
+        border: '2px solid currentColor',
+        borderTopColor: 'transparent',
+        borderRadius: '50%',
+        animation: 'spin 0.7s linear infinite',
+        display: 'inline-block',
+      }}
+    />
+  )
+}
+
+function getStatusIcon(label: string): ReactNode {
+  switch (label) {
+    case 'Running...':
+      return <StatusSpinner />
+    case 'Debugging...':
+      return <Bug size={12} color="#75beff" />
+    case 'Stepping':
+      return <ChevronRight size={12} color="#a1a1aa" />
+    case 'Stopped':
+      return <Square size={12} color="#f48771" />
+    case 'Ready':
+    default:
+      return <CheckCircle2 size={12} color="#89d185" />
+  }
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -74,15 +114,17 @@ export default function StatusBar({
   lineNumber,
   columnNumber,
   totalLines,
+  statusLabel = 'Ready',
+  statusVariant = 'success',
 }: StatusBarProps) {
   const leftItems: StatusBarItemData[] = []
 
-  // 1. Ready indicator
+  // 1. Status indicator (Ready / Running... / Debugging... / Stopped)
   leftItems.push({
-    id: 'ready',
-    label: 'Ready',
-    icon: <CheckCircle2 size={12} color="#89d185" />,
-    variant: 'success',
+    id: 'status',
+    label: statusLabel,
+    icon: getStatusIcon(statusLabel),
+    variant: statusVariant,
   })
 
   // 2. Language indicator

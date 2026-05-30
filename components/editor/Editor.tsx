@@ -8,9 +8,17 @@ import EditorTabs from './tabs/EditorTabs'
 import Terminal from './terminal/Terminal'
 import type { TerminalHandle } from './terminal/Terminal'
 import StatusBar from './statusbar/StatusBar'
+import EditorToolbar from './toolbar/EditorToolbar'
+import type {
+  ToolbarMode,
+  SupportedLanguage,
+  StepState,
+} from './toolbar/toolbar.types'
 import type { FileNode } from './explorer/explorer.types'
 import type { TabItem } from './tabs/tabs.types'
 import { readFileContent, getMonacoLanguage } from './explorer/filesystemUtils'
+
+type StatusVariant = 'default' | 'info' | 'success' | 'warning' | 'error'
 
 function dispatchContent(content: string) {
   window.dispatchEvent(
@@ -84,6 +92,18 @@ export default function Editor() {
   const [cursorLine, setCursorLine] = useState(1)
   const [cursorColumn, setCursorColumn] = useState(1)
   const [totalLines, setTotalLines] = useState(0)
+  const [statusLabel, setStatusLabel] = useState('Ready')
+  const [statusVariant, setStatusVariant] = useState<StatusVariant>('success')
+
+  // Toolbar / execution state
+  const [mode, setMode] = useState<ToolbarMode>('idle')
+  const [stepState, setStepState] = useState<StepState>({
+    currentFrame: 0,
+    totalFrames: 0,
+    isPlaying: false,
+  })
+  const [currentLanguage, setCurrentLanguage] =
+    useState<SupportedLanguage>('python')
 
   const toggleExplorer = useCallback(() => setIsExplorerVisible((p) => !p), [])
   const toggleEditor = useCallback(() => setIsEditorVisible((p) => !p), [])
@@ -139,6 +159,166 @@ export default function Editor() {
       window.removeEventListener('algolens:cursor-position', onCursor)
       window.removeEventListener('algolens:line-count', onLineCount)
     }
+  }, [])
+
+  // ---- Execution / debug controls -------------------------------------------
+  // Toolbar buttons and keyboard shortcuts DISPATCH events; the worker handlers
+  // below LISTEN to those events and do the work (no re-dispatch). The future
+  // execution backend listens to the same events.
+
+  const runDispatch = useCallback(() => {
+    window.dispatchEvent(
+      new CustomEvent('algolens:run', { detail: { language: currentLanguage } })
+    )
+  }, [currentLanguage])
+
+  const debugDispatch = useCallback(() => {
+    window.dispatchEvent(
+      new CustomEvent('algolens:debug', {
+        detail: { language: currentLanguage },
+      })
+    )
+  }, [currentLanguage])
+
+  const stopDispatch = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('algolens:stop'))
+  }, [])
+
+  const stepForwardDispatch = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('algolens:step-forward'))
+  }, [])
+
+  const stepBackDispatch = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('algolens:step-back'))
+  }, [])
+
+  const playThroughDispatch = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('algolens:play-through'))
+  }, [])
+
+  const handleLanguageChange = useCallback((lang: SupportedLanguage) => {
+    setCurrentLanguage(lang)
+    window.dispatchEvent(
+      new CustomEvent('algolens:set-language', { detail: { language: lang } })
+    )
+  }, [])
+
+  const doRun = useCallback(() => {
+    if (mode === 'running') return
+    setMode('running')
+    setStatusLabel('Running...')
+    setStatusVariant('info')
+    setIsTerminalVisible(true)
+    terminalRef.current?.clearActive()
+    terminalRef.current?.addLine('system', `Running ${currentLanguage} file...`)
+    // Temporary simulation until the execution backend exists.
+    setTimeout(() => {
+      setMode('idle')
+      setStatusLabel('Ready')
+      setStatusVariant('success')
+      terminalRef.current?.addLine(
+        'system',
+        'Ready for execution backend integration.'
+      )
+    }, 1500)
+  }, [mode, currentLanguage])
+
+  const doDebug = useCallback(() => {
+    if (mode === 'debugging') return
+    setMode('debugging')
+    setStatusLabel('Debugging...')
+    setStatusVariant('info')
+    setIsTerminalVisible(true)
+    terminalRef.current?.clearActive()
+    terminalRef.current?.addLine(
+      'system',
+      `Starting debugger for ${currentLanguage}...`
+    )
+    terminalRef.current?.addLine('system', 'Execution backend not yet connected.')
+    terminalRef.current?.addLine(
+      'info',
+      'Step controls will activate once trace is captured.'
+    )
+  }, [mode, currentLanguage])
+
+  const doStop = useCallback(() => {
+    setMode('idle')
+    setStepState({ currentFrame: 0, totalFrames: 0, isPlaying: false })
+    terminalRef.current?.addLine('warning', 'Execution stopped.')
+    setStatusLabel('Ready')
+    setStatusVariant('success')
+  }, [])
+
+  const doStepForward = useCallback(() => {
+    if (mode !== 'debugging' && mode !== 'stepping' && mode !== 'paused') return
+    setStepState((prev) =>
+      prev.currentFrame >= prev.totalFrames
+        ? prev
+        : { ...prev, currentFrame: prev.currentFrame + 1 }
+    )
+    setMode('stepping')
+  }, [mode])
+
+  const doStepBack = useCallback(() => {
+    setStepState((prev) =>
+      prev.currentFrame <= 0
+        ? prev
+        : { ...prev, currentFrame: prev.currentFrame - 1 }
+    )
+  }, [])
+
+  const doPlayThrough = useCallback(() => {
+    setStepState((prev) => ({ ...prev, isPlaying: !prev.isPlaying }))
+  }, [])
+
+  // Listen for execution events (from toolbar buttons, keyboard, Monaco).
+  useEffect(() => {
+    const onRun = () => doRun()
+    const onDebug = () => doDebug()
+    const onStop = () => doStop()
+    const onStepFw = () => doStepForward()
+    const onStepBk = () => doStepBack()
+    const onPlay = () => doPlayThrough()
+
+    window.addEventListener('algolens:run', onRun)
+    window.addEventListener('algolens:debug', onDebug)
+    window.addEventListener('algolens:stop', onStop)
+    window.addEventListener('algolens:step-forward', onStepFw)
+    window.addEventListener('algolens:step-back', onStepBk)
+    window.addEventListener('algolens:play-through', onPlay)
+
+    return () => {
+      window.removeEventListener('algolens:run', onRun)
+      window.removeEventListener('algolens:debug', onDebug)
+      window.removeEventListener('algolens:stop', onStop)
+      window.removeEventListener('algolens:step-forward', onStepFw)
+      window.removeEventListener('algolens:step-back', onStepBk)
+      window.removeEventListener('algolens:play-through', onPlay)
+    }
+  }, [doRun, doDebug, doStop, doStepForward, doStepBack, doPlayThrough])
+
+  // Function-key fallback so F5/F9/etc. work when Monaco does NOT have focus
+  // (Monaco's own addCommand handles them while it is focused). Dispatching the
+  // same events keeps a single handling path and avoids double-firing.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest?.('.monaco-editor')) return // Monaco will handle it
+
+      let eventName: string | null = null
+      if (e.key === 'F5') eventName = e.shiftKey ? 'algolens:stop' : 'algolens:run'
+      else if (e.key === 'F9') eventName = 'algolens:debug'
+      else if (e.key === 'F10') eventName = 'algolens:step-forward'
+      else if (e.key === 'F11') eventName = 'algolens:step-back'
+      else if (e.key === 'F8') eventName = 'algolens:play-through'
+
+      if (eventName) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent(eventName))
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   // Relayout Monaco when the surrounding layout changes so it fills the space.
@@ -267,6 +447,21 @@ export default function Editor() {
       <div style={{ flexShrink: 0 }}>
         <MenuBar />
       </div>
+
+      {/* Editor toolbar */}
+      <EditorToolbar
+        mode={mode}
+        language={currentLanguage}
+        stepState={stepState}
+        hasActiveFile={tabs.length > 0}
+        onLanguageChange={handleLanguageChange}
+        onRun={runDispatch}
+        onDebug={debugDispatch}
+        onStop={stopDispatch}
+        onStepForward={stepForwardDispatch}
+        onStepBack={stepBackDispatch}
+        onPlayThrough={playThroughDispatch}
+      />
 
       {/* Main area */}
       <div
@@ -401,6 +596,8 @@ export default function Editor() {
         lineNumber={cursorLine}
         columnNumber={cursorColumn}
         totalLines={totalLines}
+        statusLabel={statusLabel}
+        statusVariant={statusVariant}
       />
     </div>
   )

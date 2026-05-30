@@ -34,6 +34,26 @@ export default function MonacoEditor() {
       window.dispatchEvent(new CustomEvent('algolens:toggle-terminal'))
     })
 
+    // Execution / debug shortcuts (dispatched as events; Editor.tsx handles them).
+    editor.addCommand(monaco.KeyCode.F5, () => {
+      window.dispatchEvent(new CustomEvent('algolens:run'))
+    })
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.F5, () => {
+      window.dispatchEvent(new CustomEvent('algolens:stop'))
+    })
+    editor.addCommand(monaco.KeyCode.F9, () => {
+      window.dispatchEvent(new CustomEvent('algolens:debug'))
+    })
+    editor.addCommand(monaco.KeyCode.F10, () => {
+      window.dispatchEvent(new CustomEvent('algolens:step-forward'))
+    })
+    editor.addCommand(monaco.KeyCode.F11, () => {
+      window.dispatchEvent(new CustomEvent('algolens:step-back'))
+    })
+    editor.addCommand(monaco.KeyCode.F8, () => {
+      window.dispatchEvent(new CustomEvent('algolens:play-through'))
+    })
+
     // Report cursor position and line count to the status bar.
     editor.onDidChangeCursorPosition((e) => {
       window.dispatchEvent(
