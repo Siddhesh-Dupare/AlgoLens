@@ -421,37 +421,29 @@ export default function FileExplorer({ onFileSelect }: FileExplorerProps) {
               }}
             />
           </div>
-        ) : fileTree.length === 0 ? (
+        ) : rootName === null ? (
           <div style={{ padding: '20px 16px' }}>
-            {rootName === null ? (
-              <>
-                <div style={{ fontSize: 12, color: '#6a6a6a', marginBottom: 8 }}>
-                  No folder open
-                </div>
-                <button
-                  type="button"
-                  onClick={handleOpenFolder}
-                  onMouseEnter={() => setEmptyBtnHovered(true)}
-                  onMouseLeave={() => setEmptyBtnHovered(false)}
-                  style={{
-                    fontSize: 12,
-                    color: '#cccccc',
-                    background: emptyBtnHovered ? '#2a2d2e' : 'transparent',
-                    border: '1px solid #3c3c3c',
-                    borderRadius: 4,
-                    padding: '6px 12px',
-                    cursor: 'pointer',
-                    width: '100%',
-                  }}
-                >
-                  Open Folder
-                </button>
-              </>
-            ) : (
-              <div style={{ fontSize: 12, color: '#6a6a6a' }}>
-                {rootName} is empty
-              </div>
-            )}
+            <div style={{ fontSize: 12, color: '#6a6a6a', marginBottom: 8 }}>
+              No folder open
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenFolder}
+              onMouseEnter={() => setEmptyBtnHovered(true)}
+              onMouseLeave={() => setEmptyBtnHovered(false)}
+              style={{
+                fontSize: 12,
+                color: '#cccccc',
+                background: emptyBtnHovered ? '#2a2d2e' : 'transparent',
+                border: '1px solid #3c3c3c',
+                borderRadius: 4,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                width: '100%',
+              }}
+            >
+              Open Folder
+            </button>
           </div>
         ) : (
           <>
@@ -482,6 +474,19 @@ export default function FileExplorer({ onFileSelect }: FileExplorerProps) {
                 {rootName}
               </span>
             </div>
+
+            {fileTree.length === 0 && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: '#5a5a5a',
+                  padding: '4px 8px 4px 24px',
+                  flexShrink: 0,
+                }}
+              >
+                Empty folder — use the + buttons to add files.
+              </div>
+            )}
 
             <div style={{ flex: 1, minHeight: 0 }}>
               <Tree<FileNode>

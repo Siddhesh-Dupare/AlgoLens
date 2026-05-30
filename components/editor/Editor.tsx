@@ -80,9 +80,11 @@ export default function Editor() {
 
   // Latest values for window-event handlers that register once.
   const tabsRef = useRef(tabs)
-  tabsRef.current = tabs
   const activeTabIdRef = useRef(activeTabId)
-  activeTabIdRef.current = activeTabId
+  useEffect(() => {
+    tabsRef.current = tabs
+    activeTabIdRef.current = activeTabId
+  })
 
   // Panel visibility
   const [isExplorerVisible, setIsExplorerVisible] = useState(true)

@@ -25,6 +25,19 @@ export default function MonacoEditor() {
     monacoRef.current = monaco
   }, [])
 
+  // Open Monaco's command palette robustly (action id can vary by build).
+  const openCommandPalette = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed) return
+    ed.focus()
+    const action = ed.getAction('editor.action.quickCommand')
+    if (action) {
+      action.run()
+    } else {
+      ed.trigger('keyboard', 'editor.action.quickCommand', null)
+    }
+  }, [])
+
   const handleMount = useCallback<OnMount>((editor, monaco) => {
     editorRef.current = editor
     monacoRef.current = monaco
@@ -62,9 +75,7 @@ export default function MonacoEditor() {
     // Command palette (Ctrl/Cmd+Shift+P).
     editor.addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP,
-      () => {
-        editor.trigger('keyboard', 'editor.action.quickCommand', null)
-      }
+      () => openCommandPalette()
     )
 
     // Report cursor position and line count to the status bar.
@@ -168,8 +179,7 @@ export default function MonacoEditor() {
       editorRef.current
         ?.getAction('editor.action.startFindReplaceAction')
         ?.run()
-    const onPalette = () =>
-      editorRef.current?.trigger('keyboard', 'editor.action.quickCommand', null)
+    const onPalette = () => openCommandPalette()
     window.addEventListener('algolens:find', onFind)
     window.addEventListener('algolens:replace', onReplace)
     window.addEventListener('algolens:command-palette', onPalette)
@@ -178,7 +188,7 @@ export default function MonacoEditor() {
       window.removeEventListener('algolens:replace', onReplace)
       window.removeEventListener('algolens:command-palette', onPalette)
     }
-  }, [])
+  }, [openCommandPalette])
 
   // Broadcast word-wrap / minimap state so the View menu can show checkmarks,
   // and answer state requests when a menu opens (it mounts after changes fire).
