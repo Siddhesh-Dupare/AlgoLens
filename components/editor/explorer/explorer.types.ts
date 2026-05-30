@@ -18,11 +18,28 @@ export interface FileNode {
   id: string
   name: string
   type: FileNodeType
+  parentId?: string
   language?: FileLanguage
   handle?: FileSystemFileHandle
   dirHandle?: FileSystemDirectoryHandle
   children?: FileNode[]
   isLoaded?: boolean
+  /** True for a freshly created placeholder node awaiting its name. */
+  isNew?: boolean
+}
+
+export interface ContextMenuState {
+  isOpen: boolean
+  x: number
+  y: number
+  node: FileNode | null
+}
+
+export interface NewInputState {
+  isActive: boolean
+  parentId: string | null
+  type: 'file' | 'folder'
+  depth: number
 }
 
 export interface OpenedTab {

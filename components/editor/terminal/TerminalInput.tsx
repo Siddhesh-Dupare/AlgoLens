@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface TerminalInputProps {
   onSubmit: (command: string) => void
@@ -16,6 +16,22 @@ export default function TerminalInput({
   const [value, setValue] = useState('')
   const [history, setHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
+  const [fontSize, setFontSize] = useState(13)
+
+  // Match the terminal output font to the global zoom level.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const dir = (e as CustomEvent).detail.direction as string
+      setFontSize((prev) => {
+        if (dir === 'in') return Math.min(prev + 1, 24)
+        if (dir === 'out') return Math.max(prev - 1, 10)
+        if (dir === 'reset') return 13
+        return prev
+      })
+    }
+    window.addEventListener('algolens:zoom', handler)
+    return () => window.removeEventListener('algolens:zoom', handler)
+  }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -62,7 +78,7 @@ export default function TerminalInput({
         style={{
           color: '#89d185',
           fontFamily: 'monospace',
-          fontSize: '13px',
+          fontSize: fontSize,
           flexShrink: 0,
           userSelect: 'none',
         }}
@@ -89,7 +105,7 @@ export default function TerminalInput({
           color: '#cccccc',
           fontFamily:
             "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-          fontSize: '13px',
+          fontSize: fontSize,
           lineHeight: '1.6',
           caretColor: '#cccccc',
         }}

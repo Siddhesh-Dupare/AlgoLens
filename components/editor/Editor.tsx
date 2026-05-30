@@ -78,6 +78,12 @@ export default function Editor() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [explorerWidth, setExplorerWidth] = useState(240)
 
+  // Latest values for window-event handlers that register once.
+  const tabsRef = useRef(tabs)
+  tabsRef.current = tabs
+  const activeTabIdRef = useRef(activeTabId)
+  activeTabIdRef.current = activeTabId
+
   // Panel visibility
   const [isExplorerVisible, setIsExplorerVisible] = useState(true)
   const [isEditorVisible, setIsEditorVisible] = useState(true)
@@ -260,6 +266,41 @@ export default function Editor() {
     window.addEventListener('algolens:save', handler)
     return () => window.removeEventListener('algolens:save', handler)
   }, [saveActiveFile])
+
+  // A file deleted in the explorer: close its tab if it is open.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const id = (e as CustomEvent).detail.id as string
+      const current = tabsRef.current
+      const index = current.findIndex((t) => t.id === id)
+      if (index === -1) return
+
+      const next = current.filter((t) => t.id !== id)
+      setTabs(next)
+
+      if (activeTabIdRef.current === id) {
+        if (next.length === 0) {
+          setActiveTabId(null)
+          setActiveLanguage('')
+          setActiveFileName('')
+          setCursorLine(1)
+          setCursorColumn(1)
+          setTotalLines(0)
+          dispatchContent('')
+          dispatchLanguage('plaintext')
+        } else {
+          const nextTab = next[Math.max(0, index - 1)]
+          setActiveTabId(nextTab.id)
+          setActiveLanguage(nextTab.language)
+          setActiveFileName(nextTab.name)
+          dispatchContent(nextTab.content)
+          dispatchLanguage(nextTab.language)
+        }
+      }
+    }
+    window.addEventListener('algolens:file-deleted', handler)
+    return () => window.removeEventListener('algolens:file-deleted', handler)
+  }, [])
 
   const doRun = useCallback(() => {
     if (mode === 'running') return

@@ -5,9 +5,12 @@ import type { NodeRendererProps } from 'react-arborist'
 import { ChevronRight } from 'lucide-react'
 import type { FileNode } from './explorer.types'
 import FileIcon from './FileTreeIcons'
+import FileExplorerNewInput from './FileExplorerNewInput'
 
 type FileTreeNodeProps = NodeRendererProps<FileNode> & {
   selectedId: string | null
+  onContextMenu: (e: React.MouseEvent, node: FileNode) => void
+  onCancelNew: (id: string) => void
 }
 
 export default function FileTreeNode({
@@ -15,11 +18,34 @@ export default function FileTreeNode({
   style,
   dragHandle,
   selectedId,
+  onContextMenu,
+  onCancelNew,
 }: FileTreeNodeProps) {
   const [hovered, setHovered] = useState(false)
 
   const isFolder = node.data.type === 'folder'
   const isActive = node.data.id === selectedId
+
+  // Inline editing (rename or freshly created node) — react-arborist manages
+  // the editing state; we just render an input bound to submit/reset.
+  if (node.isEditing) {
+    return (
+      <div ref={dragHandle} style={{ ...style }}>
+        <FileExplorerNewInput
+          depth={0}
+          type={isFolder ? 'folder' : 'file'}
+          initialValue={node.data.isNew ? '' : node.data.name}
+          onConfirm={(name) => node.submit(name)}
+          onCancel={() => {
+            const wasNew = node.data.isNew
+            const nodeId = node.data.id
+            node.reset()
+            if (wasNew) onCancelNew(nodeId)
+          }}
+        />
+      </div>
+    )
+  }
 
   let background = 'transparent'
   if (isActive) background = '#094771'
@@ -29,13 +55,24 @@ export default function FileTreeNode({
   return (
     <div
       ref={dragHandle}
+      className="explorer-row-focus"
+      tabIndex={0}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onContextMenu={(e) => onContextMenu(e, node.data)}
       onClick={(e) => {
-        if (isFolder) {
-          node.toggle()
-        } else {
-          node.handleClick(e)
+        if (isFolder) node.toggle()
+        else node.handleClick(e)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          if (isFolder) node.toggle()
+          else node.select()
+        } else if (e.key === 'ArrowRight') {
+          if (isFolder && !node.isOpen) node.toggle()
+        } else if (e.key === 'ArrowLeft') {
+          if (isFolder && node.isOpen) node.toggle()
         }
       }}
       style={{

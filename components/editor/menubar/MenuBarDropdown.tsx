@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { MenuItem } from './menubar.types'
 import MenuBarSeparator from './MenuBarSeparator'
 
@@ -16,10 +16,13 @@ function handleMenuAction(id: string): void {
       console.log('Redo')
       break
     case 'edit-find':
-      console.log('Find')
+      window.dispatchEvent(new CustomEvent('algolens:find'))
       break
     case 'edit-replace':
-      console.log('Replace')
+      window.dispatchEvent(new CustomEvent('algolens:replace'))
+      break
+    case 'view-command-palette':
+      window.dispatchEvent(new CustomEvent('algolens:command-palette'))
       break
     case 'view-zoom-in':
       window.dispatchEvent(
@@ -94,17 +97,26 @@ interface ActionRowProps {
   label: string
   shortcut?: string
   disabled?: boolean
+  checked?: boolean
   onClose: () => void
 }
 
-function ActionRow({ id, label, shortcut, disabled, onClose }: ActionRowProps) {
+function ActionRow({
+  id,
+  label,
+  shortcut,
+  disabled,
+  checked,
+  onClose,
+}: ActionRowProps) {
   const [hovered, setHovered] = useState(false)
   const isHovered = hovered && !disabled
 
   return (
     <div
-      role="menuitem"
+      role="menuitemcheckbox"
       aria-disabled={disabled ? true : undefined}
+      aria-checked={checked ? true : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={() => {
@@ -113,7 +125,7 @@ function ActionRow({ id, label, shortcut, disabled, onClose }: ActionRowProps) {
         onClose()
       }}
       style={{
-        padding: '5px 12px 5px 28px',
+        padding: '5px 12px 5px 8px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -126,7 +138,19 @@ function ActionRow({ id, label, shortcut, disabled, onClose }: ActionRowProps) {
         background: isHovered ? '#094771' : 'transparent',
       }}
     >
-      <span>{label}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span
+          style={{
+            width: 14,
+            flexShrink: 0,
+            textAlign: 'center',
+            color: '#60a5fa',
+          }}
+        >
+          {checked ? '✓' : ''}
+        </span>
+        {label}
+      </span>
       {shortcut ? (
         <span
           style={{
@@ -143,6 +167,31 @@ function ActionRow({ id, label, shortcut, disabled, onClose }: ActionRowProps) {
 }
 
 export default function MenuBarDropdown({ items, onClose }: MenuBarDropdownProps) {
+  const [wordWrapEnabled, setWordWrapEnabled] = useState(false)
+  const [minimapEnabled, setMinimapEnabled] = useState(false)
+
+  useEffect(() => {
+    const onWrap = (e: Event) =>
+      setWordWrapEnabled((e as CustomEvent).detail.enabled)
+    const onMinimap = (e: Event) =>
+      setMinimapEnabled((e as CustomEvent).detail.enabled)
+    window.addEventListener('algolens:wordwrap-state', onWrap)
+    window.addEventListener('algolens:minimap-state', onMinimap)
+    // Ask the editor for the current toggle state (this menu mounts fresh each
+    // time it opens, so it would otherwise miss earlier state-change events).
+    window.dispatchEvent(new CustomEvent('algolens:request-toggle-state'))
+    return () => {
+      window.removeEventListener('algolens:wordwrap-state', onWrap)
+      window.removeEventListener('algolens:minimap-state', onMinimap)
+    }
+  }, [])
+
+  const checkedFor = (id: string): boolean | undefined => {
+    if (id === 'view-toggle-wordwrap') return wordWrapEnabled
+    if (id === 'view-toggle-minimap') return minimapEnabled
+    return undefined
+  }
+
   return (
     <div
       role="menu"
@@ -170,6 +219,7 @@ export default function MenuBarDropdown({ items, onClose }: MenuBarDropdownProps
             label={item.label}
             shortcut={item.shortcut}
             disabled={item.disabled}
+            checked={checkedFor(item.id)}
             onClose={onClose}
           />
         )

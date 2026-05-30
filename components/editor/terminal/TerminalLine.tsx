@@ -28,7 +28,6 @@ export default function TerminalLine({
         padding: '1px 0',
         fontFamily:
           "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-        fontSize: '13px',
         lineHeight: '1.6',
         wordBreak: 'break-all',
       }}

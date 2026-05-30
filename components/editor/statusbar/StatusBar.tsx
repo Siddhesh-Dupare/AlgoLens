@@ -65,12 +65,12 @@ function getStatusIcon(label: string): ReactNode {
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
-  python: 'Python',
-  javascript: 'JavaScript',
-  typescript: 'TypeScript',
-  cpp: 'C++',
-  c: 'C',
-  java: 'Java',
+  python: 'Python 3.12',
+  javascript: 'Node.js 22',
+  typescript: 'TypeScript 5',
+  cpp: 'C++ (GCC 14)',
+  c: 'C (GCC 14)',
+  java: 'Java 21',
   markdown: 'Markdown',
   json: 'JSON',
   html: 'HTML',

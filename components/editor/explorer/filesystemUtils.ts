@@ -145,6 +145,7 @@ export async function readDirectoryRecursive(
         id,
         name,
         type: 'folder',
+        parentId,
         dirHandle: handle as FileSystemDirectoryHandle,
         children: subChildren,
         isLoaded: true,
@@ -156,6 +157,7 @@ export async function readDirectoryRecursive(
         id,
         name,
         type: 'file',
+        parentId,
         language: getLanguageFromFilename(name),
         handle: handle as FileSystemFileHandle,
         isLoaded: true,
@@ -205,5 +207,76 @@ export async function openFolder(): Promise<{
     }
     console.error('Failed to open folder:', err)
     return null
+  }
+}
+
+export async function createNewFile(
+  parentDirHandle: FileSystemDirectoryHandle,
+  fileName: string
+): Promise<FileSystemFileHandle | null> {
+  try {
+    const fileHandle = await parentDirHandle.getFileHandle(fileName, {
+      create: true,
+    })
+    const writable = await fileHandle.createWritable()
+    await writable.write('')
+    await writable.close()
+    return fileHandle
+  } catch (err) {
+    console.error('Failed to create file:', err)
+    return null
+  }
+}
+
+export async function createNewFolder(
+  parentDirHandle: FileSystemDirectoryHandle,
+  folderName: string
+): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    return await parentDirHandle.getDirectoryHandle(folderName, {
+      create: true,
+    })
+  } catch (err) {
+    console.error('Failed to create folder:', err)
+    return null
+  }
+}
+
+export async function deleteFileOrFolder(
+  parentDirHandle: FileSystemDirectoryHandle,
+  name: string,
+  isDirectory: boolean
+): Promise<boolean> {
+  try {
+    await parentDirHandle.removeEntry(name, { recursive: isDirectory })
+    return true
+  } catch (err) {
+    console.error('Failed to delete:', err)
+    return false
+  }
+}
+
+export async function renameFile(
+  parentDirHandle: FileSystemDirectoryHandle,
+  oldName: string,
+  newName: string
+): Promise<boolean> {
+  try {
+    const oldHandle = await parentDirHandle.getFileHandle(oldName)
+    const oldFile = await oldHandle.getFile()
+    const content = await oldFile.text()
+
+    const newHandle = await parentDirHandle.getFileHandle(newName, {
+      create: true,
+    })
+    const writable = await newHandle.createWritable()
+    await writable.write(content)
+    await writable.close()
+
+    await parentDirHandle.removeEntry(oldName)
+    return true
+  } catch (err) {
+    console.error('Failed to rename:', err)
+    return false
   }
 }

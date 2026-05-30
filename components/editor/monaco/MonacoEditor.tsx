@@ -59,6 +59,14 @@ export default function MonacoEditor() {
       window.dispatchEvent(new CustomEvent('algolens:save'))
     })
 
+    // Command palette (Ctrl/Cmd+Shift+P).
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP,
+      () => {
+        editor.trigger('keyboard', 'editor.action.quickCommand', null)
+      }
+    )
+
     // Report cursor position and line count to the status bar.
     editor.onDidChangeCursorPosition((e) => {
       window.dispatchEvent(
@@ -139,15 +147,67 @@ export default function MonacoEditor() {
     return () => window.removeEventListener('algolens:toggle-wordwrap', handler)
   }, [])
 
-  // Load file content imperatively when a file/tab is selected.
+  // Load file content imperatively when a file/tab is selected, then focus the
+  // editor so the user can type right away (delayed so the tab click settles).
   useEffect(() => {
     const handler = (e: Event) => {
       const content = (e as CustomEvent).detail.content as string
-      editorRef.current?.setValue(content)
+      const ed = editorRef.current
+      if (!ed) return
+      ed.setValue(content)
+      setTimeout(() => ed.focus(), 50)
     }
     window.addEventListener('algolens:set-content', handler)
     return () => window.removeEventListener('algolens:set-content', handler)
   }, [])
+
+  // Find / Replace / Command palette triggered from the menu bar.
+  useEffect(() => {
+    const onFind = () => editorRef.current?.getAction('actions.find')?.run()
+    const onReplace = () =>
+      editorRef.current
+        ?.getAction('editor.action.startFindReplaceAction')
+        ?.run()
+    const onPalette = () =>
+      editorRef.current?.trigger('keyboard', 'editor.action.quickCommand', null)
+    window.addEventListener('algolens:find', onFind)
+    window.addEventListener('algolens:replace', onReplace)
+    window.addEventListener('algolens:command-palette', onPalette)
+    return () => {
+      window.removeEventListener('algolens:find', onFind)
+      window.removeEventListener('algolens:replace', onReplace)
+      window.removeEventListener('algolens:command-palette', onPalette)
+    }
+  }, [])
+
+  // Broadcast word-wrap / minimap state so the View menu can show checkmarks,
+  // and answer state requests when a menu opens (it mounts after changes fire).
+  useEffect(() => {
+    const wrapOn = wordWrap === 'on'
+    window.dispatchEvent(
+      new CustomEvent('algolens:wordwrap-state', { detail: { enabled: wrapOn } })
+    )
+    window.dispatchEvent(
+      new CustomEvent('algolens:minimap-state', {
+        detail: { enabled: minimapEnabled },
+      })
+    )
+    const onRequest = () => {
+      window.dispatchEvent(
+        new CustomEvent('algolens:wordwrap-state', {
+          detail: { enabled: wordWrap === 'on' },
+        })
+      )
+      window.dispatchEvent(
+        new CustomEvent('algolens:minimap-state', {
+          detail: { enabled: minimapEnabled },
+        })
+      )
+    }
+    window.addEventListener('algolens:request-toggle-state', onRequest)
+    return () =>
+      window.removeEventListener('algolens:request-toggle-state', onRequest)
+  }, [wordWrap, minimapEnabled])
 
   // Relayout when the surrounding layout changes (e.g. terminal opens/resizes).
   useEffect(() => {
