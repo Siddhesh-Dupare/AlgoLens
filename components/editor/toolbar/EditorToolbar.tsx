@@ -15,6 +15,7 @@ interface EditorToolbarProps {
   language: SupportedLanguage
   stepState: StepState
   hasActiveFile: boolean
+  languageUnavailable?: boolean
   breadcrumb: {
     rootName: string | null
     filePath: string | null
@@ -35,6 +36,7 @@ export default function EditorToolbar({
   language,
   stepState,
   hasActiveFile,
+  languageUnavailable = false,
   breadcrumb,
   activeTabIsDirty,
   onLanguageChange,
@@ -45,6 +47,7 @@ export default function EditorToolbar({
   onStepBack,
   onPlayThrough,
 }: EditorToolbarProps) {
+  const runDisabled = !hasActiveFile || languageUnavailable
   const canStep =
     (mode === 'debugging' || mode === 'stepping' || mode === 'paused') &&
     stepState.totalFrames > 0
@@ -83,13 +86,13 @@ export default function EditorToolbar({
       {/* Run + Debug */}
       <ToolbarRunButton
         mode={mode}
-        disabled={!hasActiveFile}
+        disabled={runDisabled}
         onRun={onRun}
         onStop={onStop}
       />
       <ToolbarDebugButton
         mode={mode}
-        disabled={!hasActiveFile}
+        disabled={runDisabled}
         onDebug={onDebug}
         onStop={onStop}
       />

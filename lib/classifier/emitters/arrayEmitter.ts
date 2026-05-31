@@ -12,6 +12,7 @@ import type {
 const ARR_NAMES = ['arr', 'array', 'nums', 'data', 'numbers', 'a', 'lst', 'items', 'list']
 
 function parseArray(value: string): (string | number)[] | null {
+  // 1) JSON bracket form — Python / JS / Java arrays: [64, 34, 25]
   try {
     const clean = value
       .replace(/'/g, '"')
@@ -19,10 +20,31 @@ function parseArray(value: string): (string | number)[] | null {
       .replace(/\bFalse\b/g, 'false')
       .replace(/\bNone\b/g, 'null')
     const parsed = JSON.parse(clean)
-    return Array.isArray(parsed) ? parsed : null
+    if (Array.isArray(parsed)) return parsed
   } catch {
-    return null
+    // fall through to brace form
   }
+
+  // 2) GDB brace form — C arrays `{64, 34, 25}` and C++ vectors pretty-printed
+  //    as `std::vector of length 7, capacity 7 = {64, 34, 25}`.
+  const open = value.lastIndexOf('{')
+  const close = value.indexOf('}', open)
+  if (open !== -1 && close > open) {
+    const inner = value.slice(open + 1, close).trim()
+    if (inner === '') return []
+    const parts = inner.split(',').map((s) => s.trim()).filter(Boolean)
+    // A raw struct (no pretty-printer) looks like `{_M_impl = {...}}` — the
+    // presence of '=' inside means it's not a flat value array.
+    if (parts.some((p) => p.includes('='))) return null
+    // Guard against GDB printing uninitialized memory as a huge array.
+    if (parts.length > 64) return null
+    return parts.map((p) => {
+      const n = Number(p)
+      return Number.isNaN(n) ? p.replace(/^['"]|['"]$/g, '') : n
+    })
+  }
+
+  return null
 }
 
 function findArrayVar(

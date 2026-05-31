@@ -27,10 +27,38 @@ export default function VisualizerPanel() {
       />
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <IRPreview
-          frame={currentIRFrame}
-          algorithmClass={output?.classification.algorithmClass ?? null}
-        />
+        {isClassifying && !currentIRFrame ? (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 12,
+              color: '#8a8a8a',
+            }}
+          >
+            <span
+              style={{
+                width: 28,
+                height: 28,
+                border: '3px solid #2a2a2f',
+                borderTopColor: '#007acc',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+                display: 'inline-block',
+              }}
+            />
+            <span style={{ fontSize: 13 }}>Capturing &amp; analyzing trace…</span>
+          </div>
+        ) : (
+          <IRPreview
+            frame={currentIRFrame}
+            algorithmClass={output?.classification.algorithmClass ?? null}
+          />
+        )}
       </div>
 
       {output && output.frames.length > 0 && (

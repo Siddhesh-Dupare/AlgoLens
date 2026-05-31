@@ -75,12 +75,24 @@ export interface ServerReady {
   version: string
 }
 
+export interface RuntimeStatus {
+  type: 'runtime-status'
+  available: {
+    python: boolean
+    javascript: boolean
+    cpp: boolean
+    c: boolean
+    java: boolean
+  }
+}
+
 export type ServerMessage =
   | OutputLine
   | TraceFrame
   | ExecutionComplete
   | ExecutionError
   | ServerReady
+  | RuntimeStatus
 
 export type Language = 'python' | 'javascript' | 'cpp' | 'c' | 'java'
 

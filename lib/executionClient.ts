@@ -9,6 +9,7 @@ import type {
   OutputLine,
   ExecutionComplete,
   ExecutionError,
+  RuntimeStatus,
 } from './executionTypes'
 
 const SERVER_URL = 'ws://localhost:3001'
@@ -20,6 +21,7 @@ export interface ExecutionCallbacks {
   onComplete: (result: ExecutionComplete) => void
   onError: (err: ExecutionError) => void
   onReady: () => void
+  onRuntimeStatus: (status: RuntimeStatus['available']) => void
 }
 
 class ExecutionClient {
@@ -94,6 +96,9 @@ class ExecutionClient {
         break
       case 'error':
         this.callbacks.onError?.(msg)
+        break
+      case 'runtime-status':
+        this.callbacks.onRuntimeStatus?.(msg.available)
         break
     }
   }

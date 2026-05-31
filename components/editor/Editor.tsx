@@ -131,6 +131,10 @@ export default function Editor() {
     }
   })
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [runtimeAvailable, setRuntimeAvailable] = useState<Record<
+    string,
+    boolean
+  > | null>(null)
   const currentLanguageRef = useRef(currentLanguage)
   const claudeApiKeyRef = useRef(claudeApiKey)
 
@@ -351,6 +355,18 @@ export default function Editor() {
           '[AlgoLens] Execution server connected.'
         )
       },
+      onRuntimeStatus: (available) => {
+        setRuntimeAvailable(available)
+        const off = Object.entries(available)
+          .filter(([, ok]) => !ok)
+          .map(([lang]) => lang)
+        if (off.length > 0) {
+          terminalRef.current?.addLine(
+            'warning',
+            `[AlgoLens] Unavailable runtimes: ${off.join(', ')}`
+          )
+        }
+      },
       onOutput: (line) => {
         terminalRef.current?.addLine(
           line.stream === 'stderr' ? 'error' : 'output',
@@ -358,12 +374,10 @@ export default function Editor() {
         )
       },
       onFrame: (frame) => {
+        // Accumulate silently — do NOT move the editor arrow per frame, or it
+        // visibly jumps around during capture. The arrow is positioned once,
+        // at the first frame, when capture completes (see onComplete).
         pendingFrames.current.push(frame)
-        window.dispatchEvent(
-          new CustomEvent('algolens:executing-line', {
-            detail: { line: frame.lineNumber },
-          })
-        )
       },
       onComplete: (result) => {
         if (result.exitCode === 0) {
@@ -507,6 +521,9 @@ export default function Editor() {
     pendingFrames.current = []
     useTraceStore.getState().resetTrace()
     useClassifierStore.getState().reset()
+    // Show the loading state immediately and keep it on through capture +
+    // classification (cleared in onComplete once frames are ready).
+    useClassifierStore.getState().setIsClassifying(true)
     window.dispatchEvent(new CustomEvent('algolens:clear-execution'))
     terminalRef.current?.addLine('command', `$ Debugging ${tab.name}...`)
     terminalRef.current?.addLine('info', 'Capturing trace frames...')
@@ -818,6 +835,7 @@ export default function Editor() {
         language={currentLanguage}
         stepState={stepState}
         hasActiveFile={tabs.length > 0}
+        languageUnavailable={runtimeAvailable?.[currentLanguage] === false}
         breadcrumb={activeBreadcrumb}
         activeTabIsDirty={activeTabIsDirty}
         onLanguageChange={handleLanguageChange}
