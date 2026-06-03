@@ -954,7 +954,10 @@ export default function Editor() {
             </div>
           </div>
 
-          {/* Visualizer panel (right side) */}
+          {/* Visualizer panel (right side). Always visible — in native mode the
+              SDL3 window docks only onto the canvas sub-area (#algolens-sdl3-mount)
+              inside this panel, so the badge, scrubber, and narration stay
+              visible as normal React UI. */}
           <div
             style={{
               width: 440,
