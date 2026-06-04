@@ -5,6 +5,7 @@ import type { ClassificationResult, DetectionTier } from '@/lib/classifier/types
 interface AlgorithmBadgeProps {
   classification: ClassificationResult | null
   isClassifying: boolean
+  isNarrating?: boolean
 }
 
 function tierInfo(tier: DetectionTier): { label: string; bg: string; fg: string } {
@@ -29,6 +30,7 @@ function barColor(confidence: number): string {
 export default function AlgorithmBadge({
   classification,
   isClassifying,
+  isNarrating = false,
 }: AlgorithmBadgeProps) {
   return (
     <div
@@ -112,6 +114,32 @@ export default function AlgorithmBadge({
               {classification.dataStructure}
             </div>
           </div>
+
+          {isNarrating && (
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 10,
+                color: '#71717a',
+              }}
+            >
+              <span
+                style={{
+                  width: 9,
+                  height: 9,
+                  border: '2px solid #2a2a2f',
+                  borderTopColor: '#c084fc',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                  display: 'inline-block',
+                }}
+              />
+              Generating narrations…
+            </div>
+          )}
         </>
       ) : (
         <span style={{ fontSize: 13, color: '#3c3c3c' }}>

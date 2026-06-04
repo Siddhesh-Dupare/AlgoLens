@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AlgoLens — Frontend
 
-## Getting Started
+The editor + visualizer UI for **AlgoLens**, a desktop DSA (data structures &
+algorithms) visualizer. This is the web layer: a VS Code–style editor that runs
+and debugs code, classifies the algorithm, and renders a live step-by-step
+visualization.
 
-First, run the development server:
+It is one of three parts of the project:
+
+| Part | Path | Role |
+|------|------|------|
+| **Frontend** (this) | `frontend/` | Editor + classifier + visualizer UI (Next.js) |
+| Execution server | [`../algolens-server`](../algolens-server) | Runs/debugs code, streams output + trace frames |
+| Desktop shell | [`../desktop`](../desktop) | Packages this UI as a native Windows app |
+
+## Stack
+
+- **Next.js 16** (App Router, Turbopack) + **React 19** + **TypeScript**
+- **Zustand** for state, **Monaco** for the editor
+- Static export (`output: 'export'`) so the desktop shell can serve it offline
+
+> ⚠️ See [`AGENTS.md`](./AGENTS.md): this Next.js version has breaking changes
+> vs. older docs — check `node_modules/next/dist/docs/` before relying on
+> training-data assumptions.
+
+## Prerequisites
+
+- [bun](https://bun.sh) (used for all frontend + server commands — not npm)
+- The [execution server](../algolens-server) running for Run/Debug to work
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun install
+
+# UI only (Run/Debug need the server too — see below)
+bun run dev            # http://localhost:3000
+
+# UI + execution server together
+bun run dev:full
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`bun run server` starts just the execution server (`ws://localhost:3001`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Build
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+bun run build          # static export → ./out
+```
 
-## Learn More
+The `out/` directory is what the desktop shell serves. After changing the UI,
+rebuild and the desktop can pick it up (see the desktop README).
 
-To learn more about Next.js, take a look at the following resources:
+## Project structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+app/                     Next.js app router entry (page.tsx renders <Editor/>)
+components/editor/
+  Editor.tsx             Top-level layout + execution/debug orchestration
+  monaco/                Monaco editor wrapper
+  explorer/              File explorer (File System Access API)
+  tabs/ terminal/ toolbar/ statusbar/ menubar/
+  settings/              SettingsPanel — Claude / Gemini API keys
+  visualizer/            AlgorithmBadge, IRPreview, FrameScrubber,
+                         QAPanel (Ask AI), ComplexityChart (Analysis)
+lib/
+  classifier/            Hybrid classifier (tier1 patterns, tier2 names,
+                         tier3 LLM) + Visual IR emitters + narration
+  ai/client.ts           Unified Claude/Gemini chat client (chatAI)
+  executionClient.ts     WebSocket client to the execution server
+  executionTypes.ts      Shared protocol types (mirror of server types)
+store/                   Zustand stores (classifier, trace)
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Features
 
-## Deploy on Vercel
+- **Editor + execution** — open a folder, edit, **Run** (stdout/stderr) and
+  **Debug** (step-by-step trace) across Python, JavaScript, C, C++, Java.
+- **Hybrid classifier** — identifies the algorithm via Tier 1 (trace pattern
+  match), Tier 2 (name heuristics), and Tier 3 (LLM), producing a **Visual IR**.
+- **Visualizer** — renders arrays/graphs/etc. and steps through frames with a
+  scrubber and narration.
+- **AI features** (optional, Phase 6) — step **narrator**, context-aware
+  **Ask AI** about the current step, and **empirical complexity** analysis.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## API keys (optional)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The AI features use **Claude** or **Gemini**. Add a key in **Settings** (gear
+icon). Keys are stored in `sessionStorage` (`algolens_api_key` /
+`algolens_gemini_key`); Gemini is preferred when both are set. Everything else
+works without a key — AI only enhances, it never gates.
