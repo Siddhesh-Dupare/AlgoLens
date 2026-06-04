@@ -21,7 +21,19 @@ export interface StopRequest {
   id: string
 }
 
-export type ClientMessage = RunRequest | DebugRequest | StopRequest
+export interface ComplexityRequest {
+  type: 'complexity'
+  id: string
+  language: Language
+  code: string
+  inputSizes: number[]
+}
+
+export type ClientMessage =
+  | RunRequest
+  | DebugRequest
+  | StopRequest
+  | ComplexityRequest
 
 export interface OutputLine {
   type: 'output'
@@ -86,6 +98,26 @@ export interface RuntimeStatus {
   }
 }
 
+export interface ComplexityMeasurement {
+  n: number
+  operations: number
+  timeMs: number
+}
+
+export interface ComplexityResult {
+  type: 'complexity-result'
+  id: string
+  measurements: ComplexityMeasurement[]
+}
+
+export interface ComplexityProgress {
+  type: 'complexity-progress'
+  id: string
+  n: number
+  index: number
+  total: number
+}
+
 export type ServerMessage =
   | OutputLine
   | TraceFrame
@@ -93,6 +125,8 @@ export type ServerMessage =
   | ExecutionError
   | ServerReady
   | RuntimeStatus
+  | ComplexityResult
+  | ComplexityProgress
 
 export type Language = 'python' | 'javascript' | 'cpp' | 'c' | 'java'
 

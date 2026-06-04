@@ -10,7 +10,16 @@ import type {
   ExecutionComplete,
   ExecutionError,
   RuntimeStatus,
+  ComplexityRequest,
+  ComplexityResult,
+  ComplexityProgress,
 } from './executionTypes'
+
+export interface ComplexityHandlers {
+  onProgress?: (p: ComplexityProgress) => void
+  onResult?: (r: ComplexityResult) => void
+  onError?: (e: ExecutionError) => void
+}
 
 const SERVER_URL = 'ws://localhost:3001'
 const RECONNECT_DELAY_MS = 2000
@@ -30,6 +39,9 @@ class ExecutionClient {
   private callbacks: Partial<ExecutionCallbacks> = {}
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private currentRequestId: string | null = null
+  // Complexity runs use per-request handlers so they don't clobber the global
+  // run/debug callbacks set by the editor.
+  private complexityHandlers = new Map<string, ComplexityHandlers>()
 
   connect(): void {
     if (this.connected || this.ws) return
@@ -95,10 +107,23 @@ class ExecutionClient {
         this.callbacks.onComplete?.(msg)
         break
       case 'error':
-        this.callbacks.onError?.(msg)
+        // Route complexity-run errors to that run's handler, not the editor.
+        if (this.complexityHandlers.has(msg.id)) {
+          this.complexityHandlers.get(msg.id)?.onError?.(msg)
+          this.complexityHandlers.delete(msg.id)
+        } else {
+          this.callbacks.onError?.(msg)
+        }
         break
       case 'runtime-status':
         this.callbacks.onRuntimeStatus?.(msg.available)
+        break
+      case 'complexity-progress':
+        this.complexityHandlers.get(msg.id)?.onProgress?.(msg)
+        break
+      case 'complexity-result':
+        this.complexityHandlers.get(msg.id)?.onResult?.(msg)
+        this.complexityHandlers.delete(msg.id)
         break
     }
   }
@@ -127,6 +152,29 @@ class ExecutionClient {
     const id = crypto.randomUUID()
     this.currentRequestId = id
     const msg: DebugRequest = { type: 'debug', id, language, code, filename }
+    this.ws.send(JSON.stringify(msg))
+    return id
+  }
+
+  runComplexity(
+    language: Language,
+    code: string,
+    inputSizes: number[],
+    handlers: ComplexityHandlers
+  ): string | null {
+    if (!this.connected || !this.ws) {
+      console.warn('[ExecutionClient] Server not connected')
+      return null
+    }
+    const id = crypto.randomUUID()
+    this.complexityHandlers.set(id, handlers)
+    const msg: ComplexityRequest = {
+      type: 'complexity',
+      id,
+      language,
+      code,
+      inputSizes,
+    }
     this.ws.send(JSON.stringify(msg))
     return id
   }

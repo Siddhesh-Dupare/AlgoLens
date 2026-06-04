@@ -21,6 +21,8 @@ import { executionClient } from '@/lib/executionClient'
 import type { TraceFrame as ServerTraceFrame } from '@/lib/executionTypes'
 import { useTraceStore } from '@/store/useTraceStore'
 import { classify } from '@/lib/classifier'
+import { generateNarrations } from '@/lib/classifier/narration'
+import { hasAIKey } from '@/lib/ai/client'
 import { useClassifierStore } from '@/store/useClassifierStore'
 import VisualizerPanel from './visualizer/VisualizerPanel'
 import SettingsPanel from './settings/SettingsPanel'
@@ -451,6 +453,40 @@ export default function Editor() {
                 `[AlgoLens] Detected: ${label} (${(confidence * 100).toFixed(0)}% · ${tierLabel})`
               )
               store.setIRFrameIndex(0)
+
+              // Phase 6: enhance narrations via Claude — async and non-blocking.
+              // The user can step through with the default narrations right now;
+              // better ones swap in (preserving position) when the call returns.
+              if (hasAIKey()) {
+                store.setIsNarrating(true)
+                terminalRef.current?.addLine(
+                  'info',
+                  '[AlgoLens] Generating step narrations...'
+                )
+                generateNarrations({
+                  traceFrames: frames,
+                  classification: output.classification,
+                  language: currentLanguageRef.current,
+                  sourceCode: tab?.content ?? '',
+                })
+                  .then((narrations) => {
+                    if (narrations.length === 0) return
+                    const cs2 = useClassifierStore.getState()
+                    const cur = cs2.output
+                    if (!cur) return
+                    const newFrames = cur.frames.map((f, i) =>
+                      narrations[i] ? { ...f, narration: narrations[i] } : f
+                    )
+                    cs2.updateFrames(newFrames)
+                    terminalRef.current?.addLine(
+                      'success',
+                      `[AlgoLens] Narrations ready (${narrations.length} steps).`
+                    )
+                  })
+                  .finally(() => {
+                    useClassifierStore.getState().setIsNarrating(false)
+                  })
+              }
             })
             .catch((err) => {
               const store = useClassifierStore.getState()
