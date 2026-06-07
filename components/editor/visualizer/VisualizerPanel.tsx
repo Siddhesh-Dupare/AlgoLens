@@ -32,6 +32,7 @@ export default function VisualizerPanel() {
   const output = useClassifierStore((s) => s.output)
   const isClassifying = useClassifierStore((s) => s.isClassifying)
   const isNarrating = useClassifierStore((s) => s.isNarrating)
+  const classifyLatencyMs = useClassifierStore((s) => s.classifyLatencyMs)
   const currentIRFrame = useClassifierStore((s) => s.currentIRFrame)
   const irFrameIndex = useClassifierStore((s) => s.irFrameIndex)
   const setIRFrameIndex = useClassifierStore((s) => s.setIRFrameIndex)
@@ -131,6 +132,7 @@ export default function VisualizerPanel() {
         classification={output?.classification ?? null}
         isClassifying={isClassifying}
         isNarrating={isNarrating}
+        latencyMs={classifyLatencyMs}
       />
 
       {/* Ask AI toolbar row — below the badge so it never overlaps the tier

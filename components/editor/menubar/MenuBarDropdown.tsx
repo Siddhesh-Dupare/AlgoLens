@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { MenuItem } from './menubar.types'
 import MenuBarSeparator from './MenuBarSeparator'
+import { useTelemetryStore } from '@/store/useTelemetryStore'
 
 function handleMenuAction(id: string): void {
   switch (id) {
@@ -77,10 +78,19 @@ function handleMenuAction(id: string): void {
       )
       break
     case 'help-about':
-      console.log('AlgoLens v1.0 — DSA Visualizer')
+      window.dispatchEvent(new CustomEvent('algolens:show-about'))
       break
     case 'help-shortcuts':
-      console.log('Keyboard Shortcuts')
+      window.dispatchEvent(new CustomEvent('algolens:show-shortcuts'))
+      break
+    case 'help-benchmark':
+      window.dispatchEvent(new CustomEvent('algolens:run-benchmark'))
+      break
+    case 'help-performance':
+      window.dispatchEvent(new CustomEvent('algolens:show-performance'))
+      break
+    case 'help-export-study':
+      useTelemetryStore.getState().exportData()
       break
     default:
       console.log('Menu action:', id)

@@ -9,6 +9,7 @@ interface ClassifierStore {
   isClassifying: boolean
   isNarrating: boolean
   classifyError: string | null
+  classifyLatencyMs: number
   currentIRFrame: VisualIRFrame | null
   irFrameIndex: number
 
@@ -16,6 +17,7 @@ interface ClassifierStore {
   setIsClassifying: (v: boolean) => void
   setIsNarrating: (v: boolean) => void
   setClassifyError: (e: string | null) => void
+  setClassifyLatencyMs: (ms: number) => void
   setIRFrameIndex: (index: number) => void
   // Replace the frame list in place (e.g. after AI narrations arrive) WITHOUT
   // resetting the user's current position — keeps irFrameIndex and refreshes
@@ -29,6 +31,7 @@ export const useClassifierStore = create<ClassifierStore>((set, get) => ({
   isClassifying: false,
   isNarrating: false,
   classifyError: null,
+  classifyLatencyMs: 0,
   currentIRFrame: null,
   irFrameIndex: 0,
 
@@ -42,6 +45,7 @@ export const useClassifierStore = create<ClassifierStore>((set, get) => ({
   setIsClassifying: (v) => set({ isClassifying: v }),
   setIsNarrating: (v) => set({ isNarrating: v }),
   setClassifyError: (e) => set({ classifyError: e }),
+  setClassifyLatencyMs: (ms) => set({ classifyLatencyMs: ms }),
 
   updateFrames: (frames) => {
     const { output, irFrameIndex } = get()

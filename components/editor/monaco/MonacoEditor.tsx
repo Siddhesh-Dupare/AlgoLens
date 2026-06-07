@@ -43,6 +43,9 @@ export default function MonacoEditor() {
     editorRef.current = editor
     monacoRef.current = monaco
 
+    // Signal the loading overlay that the heavy editor is ready (C5).
+    window.dispatchEvent(new CustomEvent('algolens:monaco-ready'))
+
     // Toggle the terminal even when Monaco has keyboard focus.
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Backquote, () => {
       window.dispatchEvent(new CustomEvent('algolens:toggle-terminal'))

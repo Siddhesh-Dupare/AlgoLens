@@ -15,6 +15,7 @@ import StatusBarItem from './StatusBarItem'
 import StatusBarToggle from './StatusBarToggle'
 import type { StatusBarItemData, PanelToggleState } from './statusbar.types'
 import { getLanguageDotColor } from './statusbar.types'
+import { useTelemetryStore } from '@/store/useTelemetryStore'
 
 type StatusVariant = 'default' | 'info' | 'success' | 'warning' | 'error'
 
@@ -107,6 +108,10 @@ export default function StatusBar({
   statusLabel = 'Ready',
   statusVariant = 'success',
 }: StatusBarProps) {
+  const isStudyMode = useTelemetryStore((s) => s.isStudyMode)
+  const isControlMode = useTelemetryStore((s) => s.isControlMode)
+  const participantId = useTelemetryStore((s) => s.participantId)
+
   const leftItems: StatusBarItemData[] = []
 
   // 1. Status indicator (Ready / Running... / Debugging... / Stopped)
@@ -192,6 +197,22 @@ export default function StatusBar({
         {leftItems.map((item) => (
           <StatusBarItem key={item.id} item={item} />
         ))}
+        {isStudyMode && (
+          <span
+            style={{
+              marginLeft: 6,
+              padding: '2px 8px',
+              borderRadius: 4,
+              fontSize: 11,
+              fontWeight: 600,
+              color: '#0a0a14',
+              background: '#fbbf24',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {isControlMode ? 'Control Mode' : 'Study Mode'} — {participantId}
+          </span>
+        )}
       </div>
 
       {/* Divider */}

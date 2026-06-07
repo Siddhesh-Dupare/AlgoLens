@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { executionClient } from '@/lib/executionClient'
 import { chatAI } from '@/lib/ai/client'
+import { useTelemetryStore } from '@/store/useTelemetryStore'
 import type { ComplexityMeasurement } from '@/lib/executionTypes'
 import type { ClassificationResult } from '@/lib/classifier/types'
 
@@ -210,6 +211,7 @@ export default function ComplexityChart({
 
   const run = () => {
     if (!supported || status === 'running') return
+    useTelemetryStore.getState().recordComplexityRun(null) // no-op outside study mode
     setStatus('running')
     setMeasurements(null)
     setAnalysis(null)

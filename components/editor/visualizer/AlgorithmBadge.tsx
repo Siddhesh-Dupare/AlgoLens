@@ -6,6 +6,7 @@ interface AlgorithmBadgeProps {
   classification: ClassificationResult | null
   isClassifying: boolean
   isNarrating?: boolean
+  latencyMs?: number
 }
 
 function tierInfo(tier: DetectionTier): { label: string; bg: string; fg: string } {
@@ -31,6 +32,7 @@ export default function AlgorithmBadge({
   classification,
   isClassifying,
   isNarrating = false,
+  latencyMs = 0,
 }: AlgorithmBadgeProps) {
   return (
     <div
@@ -67,7 +69,14 @@ export default function AlgorithmBadge({
               gap: 8,
             }}
           >
-            <span style={{ fontSize: 18, fontWeight: 600, color: '#e2e8f0' }}>
+            <span
+              style={{ fontSize: 18, fontWeight: 600, color: '#e2e8f0' }}
+              title={
+                latencyMs > 0
+                  ? `Classified in ${latencyMs.toFixed(1)}ms`
+                  : undefined
+              }
+            >
               {classification.label}
             </span>
             {(() => {

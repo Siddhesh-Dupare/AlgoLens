@@ -24,8 +24,18 @@ import { classify } from '@/lib/classifier'
 import { generateNarrations } from '@/lib/classifier/narration'
 import { hasAIKey } from '@/lib/ai/client'
 import { useClassifierStore } from '@/store/useClassifierStore'
+import { useTelemetryStore } from '@/store/useTelemetryStore'
+import { friendlyError } from '@/lib/errorMessages'
 import VisualizerPanel from './visualizer/VisualizerPanel'
 import SettingsPanel from './settings/SettingsPanel'
+import ShortcutsDialog from './dialogs/ShortcutsDialog'
+import AboutDialog from './dialogs/AboutDialog'
+import BenchmarkDialog from './dialogs/BenchmarkDialog'
+import PerformanceDialog from './dialogs/PerformanceDialog'
+import StudyPanel, { STUDY_TASKS } from './study/StudyPanel'
+import ParticipantIdModal from './study/ParticipantIdModal'
+import LoadingOverlay from './LoadingOverlay'
+import OnboardingOverlay from './OnboardingOverlay'
 
 type StatusVariant = 'default' | 'info' | 'success' | 'warning' | 'error'
 
@@ -133,6 +143,14 @@ export default function Editor() {
     }
   })
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
+  const [showBenchmark, setShowBenchmark] = useState(false)
+  const [showPerformance, setShowPerformance] = useState(false)
+  const [participantModal, setParticipantModal] = useState<{
+    mode: 'study' | 'control'
+  } | null>(null)
+  const isControlMode = useTelemetryStore((s) => s.isControlMode)
   const [runtimeAvailable, setRuntimeAvailable] = useState<Record<
     string,
     boolean
@@ -146,12 +164,41 @@ export default function Editor() {
     claudeApiKeyRef.current = claudeApiKey
   })
 
-  // Open the settings panel when the toolbar dispatches the event.
+  // Open the settings panel / Help dialogs when the menu dispatches the events.
   useEffect(() => {
     const onOpenSettings = () => setIsSettingsOpen(true)
+    const onShowShortcuts = () => setShowShortcuts(true)
+    const onShowAbout = () => setShowAbout(true)
+    const onRunBenchmark = () => setShowBenchmark(true)
+    const onShowPerformance = () => setShowPerformance(true)
     window.addEventListener('algolens:open-settings', onOpenSettings)
-    return () =>
+    window.addEventListener('algolens:show-shortcuts', onShowShortcuts)
+    window.addEventListener('algolens:show-about', onShowAbout)
+    window.addEventListener('algolens:run-benchmark', onRunBenchmark)
+    window.addEventListener('algolens:show-performance', onShowPerformance)
+    return () => {
       window.removeEventListener('algolens:open-settings', onOpenSettings)
+      window.removeEventListener('algolens:show-shortcuts', onShowShortcuts)
+      window.removeEventListener('algolens:show-about', onShowAbout)
+      window.removeEventListener('algolens:run-benchmark', onRunBenchmark)
+      window.removeEventListener('algolens:show-performance', onShowPerformance)
+    }
+  }, [])
+
+  // Hidden study activation shortcuts: Ctrl+Shift+Alt+S (study) / +C (control).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey && e.shiftKey && e.altKey)) return
+      if (e.code === 'KeyS') {
+        e.preventDefault()
+        setParticipantModal({ mode: 'study' })
+      } else if (e.code === 'KeyC') {
+        e.preventDefault()
+        setParticipantModal({ mode: 'control' })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   const toggleExplorer = useCallback(() => setIsExplorerVisible((p) => !p), [])
@@ -438,6 +485,7 @@ export default function Editor() {
           const tab = tabsRef.current.find(
             (t) => t.id === activeTabIdRef.current
           )
+          const classifyStart = performance.now()
           classify(frames, tab?.content ?? '', {
             language: currentLanguageRef.current,
             apiKey: claudeApiKeyRef.current,
@@ -445,6 +493,7 @@ export default function Editor() {
             .then((output) => {
               const store = useClassifierStore.getState()
               store.setOutput(output)
+              store.setClassifyLatencyMs(performance.now() - classifyStart)
               store.setIsClassifying(false)
               const { label, confidence, tier } = output.classification
               const tierLabel = tier === 0 ? 'fallback' : `Tier ${tier}`
@@ -494,7 +543,7 @@ export default function Editor() {
               store.setIsClassifying(false)
               terminalRef.current?.addLine(
                 'warning',
-                '[AlgoLens] Classification failed: ' + String(err?.message ?? err)
+                friendlyError('Classification failed: ' + String(err?.message ?? err))
               )
             })
         } else {
@@ -505,7 +554,10 @@ export default function Editor() {
       onError: (err) => {
         setStatusLabel('Error')
         setStatusVariant('error')
-        terminalRef.current?.addLine('error', `[${err.errorType}] ${err.message}`)
+        terminalRef.current?.addLine(
+          'error',
+          friendlyError(`[${err.errorType}] ${err.message}`)
+        )
         setMode('idle')
         pendingFrames.current = []
       },
@@ -534,9 +586,8 @@ export default function Editor() {
     if (!id) {
       terminalRef.current?.addLine(
         'error',
-        'Execution server not connected. Start the server with:'
+        friendlyError('Execution server not connected')
       )
-      terminalRef.current?.addLine('command', 'cd algolens-server && bun run dev')
       setMode('idle')
       setStatusLabel('Ready')
       setStatusVariant('success')
@@ -566,7 +617,10 @@ export default function Editor() {
 
     const id = executionClient.debug(currentLanguage, tab.content, tab.name)
     if (!id) {
-      terminalRef.current?.addLine('error', 'Execution server not connected.')
+      terminalRef.current?.addLine(
+        'error',
+        friendlyError('Execution server not connected')
+      )
       setMode('idle')
     }
   }, [mode, activeTabId, tabs, currentLanguage])
@@ -606,6 +660,7 @@ export default function Editor() {
   const doStepForward = useCallback(() => {
     const ts = useTraceStore.getState()
     if (ts.frames.length === 0) return
+    useTelemetryStore.getState().recordStepForward() // no-op outside study mode
     setMode('stepping')
     stepTo(ts.frameIndex + 1)
   }, [stepTo])
@@ -613,6 +668,7 @@ export default function Editor() {
   const doStepBack = useCallback(() => {
     const ts = useTraceStore.getState()
     if (ts.frames.length === 0) return
+    useTelemetryStore.getState().recordStepBack() // no-op outside study mode
     stepTo(ts.frameIndex - 1)
   }, [stepTo])
 
@@ -833,15 +889,24 @@ export default function Editor() {
     return tabs.find((t) => t.id === activeTabId)?.isDirty ?? false
   }, [activeTabId, tabs])
 
-  // Window title reflects the active file and its dirty state (VS Code style).
+  // Window title reflects the active file, its dirty state, and execution status
+  // (VS Code style). In CEF, document.title updates the native window title.
   useEffect(() => {
+    if (mode === 'running') {
+      document.title = 'Running… — AlgoLens'
+      return
+    }
+    if (mode === 'debugging') {
+      document.title = 'Debugging… — AlgoLens'
+      return
+    }
     const tab = activeTabId ? tabs.find((t) => t.id === activeTabId) : undefined
     if (!tab) {
       document.title = 'AlgoLens'
       return
     }
     document.title = `${tab.isDirty ? '● ' : ''}${tab.name} — AlgoLens`
-  }, [activeTabId, tabs])
+  }, [activeTabId, tabs, mode])
 
   const hasTabs = tabs.length > 0
   // Keep the editor row occupying space whenever EITHER the explorer or the
@@ -990,21 +1055,23 @@ export default function Editor() {
             </div>
           </div>
 
-          {/* Visualizer panel (right side). Always visible — in native mode the
-              SDL3 window docks only onto the canvas sub-area (#algolens-sdl3-mount)
-              inside this panel, so the badge, scrubber, and narration stay
-              visible as normal React UI. */}
-          <div
-            style={{
-              width: 440,
-              flexShrink: 0,
-              height: '100%',
-              borderLeft: '1px solid #2d2d2d',
-              overflow: 'hidden',
-            }}
-          >
-            <VisualizerPanel />
-          </div>
+          {/* Visualizer panel (right side). Hidden in study Control Mode so the
+              control group debugs without any visualization or AI. Otherwise
+              always visible — in native mode the SDL3 window docks onto the
+              canvas sub-area inside this panel. */}
+          {!isControlMode && (
+            <div
+              style={{
+                width: 440,
+                flexShrink: 0,
+                height: '100%',
+                borderLeft: '1px solid #2d2d2d',
+                overflow: 'hidden',
+              }}
+            >
+              <VisualizerPanel />
+            </div>
+          )}
         </div>
 
         {/* Terminal panel */}
@@ -1016,6 +1083,10 @@ export default function Editor() {
           onClose={() => setIsTerminalVisible(false)}
         />
       </div>
+
+      {/* Study panel (only visible in study/control mode) — sits above the
+          status bar and guides the participant through the tasks. */}
+      <StudyPanel />
 
       {/* Status bar — always visible, always last in the column */}
       <StatusBar
@@ -1042,6 +1113,37 @@ export default function Editor() {
           onApiKeyChange={(key) => setClaudeApiKey(key)}
         />
       )}
+
+      {showShortcuts && (
+        <ShortcutsDialog onClose={() => setShowShortcuts(false)} />
+      )}
+
+      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
+
+      {showBenchmark && (
+        <BenchmarkDialog onClose={() => setShowBenchmark(false)} />
+      )}
+
+      {showPerformance && (
+        <PerformanceDialog onClose={() => setShowPerformance(false)} />
+      )}
+
+      {participantModal && (
+        <ParticipantIdModal
+          mode={participantModal.mode}
+          onClose={() => setParticipantModal(null)}
+          onSubmit={(id) => {
+            const t = useTelemetryStore.getState()
+            if (participantModal.mode === 'control') t.enableControlMode(id)
+            else t.enableStudyMode(id)
+            t.startTask(STUDY_TASKS[0].id)
+            setParticipantModal(null)
+          }}
+        />
+      )}
+
+      <OnboardingOverlay />
+      <LoadingOverlay />
     </div>
   )
 }

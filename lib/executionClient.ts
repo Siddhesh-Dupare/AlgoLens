@@ -21,6 +21,13 @@ export interface ComplexityHandlers {
   onError?: (e: ExecutionError) => void
 }
 
+interface TraceCollector {
+  frames: TraceFrame[]
+  resolve: (frames: TraceFrame[]) => void
+  reject: (err: Error) => void
+  timer: ReturnType<typeof setTimeout>
+}
+
 const SERVER_URL = 'ws://localhost:3001'
 const RECONNECT_DELAY_MS = 2000
 
@@ -42,6 +49,15 @@ class ExecutionClient {
   // Complexity runs use per-request handlers so they don't clobber the global
   // run/debug callbacks set by the editor.
   private complexityHandlers = new Map<string, ComplexityHandlers>()
+  // One-shot debug runs (used by the classifier benchmark) collect frames by id
+  // and resolve a promise on completion, also without touching global callbacks.
+  private traceCollectors = new Map<string, TraceCollector>()
+  // One-shot plain runs (used by the performance report) just resolve on
+  // completion; their output is discarded so the editor terminal isn't touched.
+  private runCollectors = new Map<
+    string,
+    { resolve: () => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+  >()
 
   connect(): void {
     if (this.connected || this.ws) return
@@ -97,20 +113,48 @@ class ExecutionClient {
       case 'ready':
         this.callbacks.onReady?.()
         break
-      case 'output':
+      case 'output': {
+        if (this.runCollectors.has(msg.id)) break // discard one-shot run output
         this.callbacks.onOutput?.(msg)
         break
-      case 'frame':
-        this.callbacks.onFrame?.(msg)
+      }
+      case 'frame': {
+        const tc = this.traceCollectors.get(msg.id)
+        if (tc) tc.frames.push(msg)
+        else this.callbacks.onFrame?.(msg)
         break
-      case 'complete':
-        this.callbacks.onComplete?.(msg)
+      }
+      case 'complete': {
+        const tc = this.traceCollectors.get(msg.id)
+        const rc = this.runCollectors.get(msg.id)
+        if (tc) {
+          clearTimeout(tc.timer)
+          this.traceCollectors.delete(msg.id)
+          tc.resolve(tc.frames)
+        } else if (rc) {
+          clearTimeout(rc.timer)
+          this.runCollectors.delete(msg.id)
+          rc.resolve()
+        } else {
+          this.callbacks.onComplete?.(msg)
+        }
         break
+      }
       case 'error':
-        // Route complexity-run errors to that run's handler, not the editor.
+        // Route errors to whichever one-shot handler owns the id; else the editor.
         if (this.complexityHandlers.has(msg.id)) {
           this.complexityHandlers.get(msg.id)?.onError?.(msg)
           this.complexityHandlers.delete(msg.id)
+        } else if (this.traceCollectors.has(msg.id)) {
+          const tc = this.traceCollectors.get(msg.id)!
+          clearTimeout(tc.timer)
+          this.traceCollectors.delete(msg.id)
+          tc.reject(new Error(msg.message))
+        } else if (this.runCollectors.has(msg.id)) {
+          const rc = this.runCollectors.get(msg.id)!
+          clearTimeout(rc.timer)
+          this.runCollectors.delete(msg.id)
+          rc.reject(new Error(msg.message))
         } else {
           this.callbacks.onError?.(msg)
         }
@@ -177,6 +221,55 @@ class ExecutionClient {
     }
     this.ws.send(JSON.stringify(msg))
     return id
+  }
+
+  // One-shot debug that resolves with the captured trace frames. Used by the
+  // classifier benchmark to exercise the full (Tier 1 + 2 + 3) pipeline without
+  // disturbing the editor's live debug callbacks.
+  traceOnce(
+    language: Language,
+    code: string,
+    filename: string,
+    timeoutMs = 15000
+  ): Promise<TraceFrame[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.connected || !this.ws) {
+        reject(new Error('Execution server not connected'))
+        return
+      }
+      const id = crypto.randomUUID()
+      const timer = setTimeout(() => {
+        this.traceCollectors.delete(id)
+        reject(new Error('Trace timed out'))
+      }, timeoutMs)
+      this.traceCollectors.set(id, { frames: [], resolve, reject, timer })
+      const msg: DebugRequest = { type: 'debug', id, language, code, filename }
+      this.ws.send(JSON.stringify(msg))
+    })
+  }
+
+  // One-shot run (no trace) that resolves on completion. Used by the
+  // performance report to time plain execution vs. traced execution.
+  runOnce(
+    language: Language,
+    code: string,
+    filename: string,
+    timeoutMs = 15000
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.connected || !this.ws) {
+        reject(new Error('Execution server not connected'))
+        return
+      }
+      const id = crypto.randomUUID()
+      const timer = setTimeout(() => {
+        this.runCollectors.delete(id)
+        reject(new Error('Run timed out'))
+      }, timeoutMs)
+      this.runCollectors.set(id, { resolve, reject, timer })
+      const msg: RunRequest = { type: 'run', id, language, code, filename }
+      this.ws.send(JSON.stringify(msg))
+    })
   }
 
   stop(): void {

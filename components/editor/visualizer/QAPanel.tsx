@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ClassificationResult, VisualIRFrame } from '@/lib/classifier/types'
 import { chatAI } from '@/lib/ai/client'
+import { useTelemetryStore } from '@/store/useTelemetryStore'
 import ComplexityChart from './ComplexityChart'
 
 interface QAPanelProps {
@@ -125,6 +126,7 @@ export default function QAPanel({
   const handleSend = async () => {
     const question = inputValue.trim()
     if (!question || isLoading || !hasKey) return
+    useTelemetryStore.getState().recordQAQuery() // no-op outside study mode
 
     // Prior history (last 6 display messages) — sent before the contextful one.
     const priorForApi = messages.slice(-6).map((m) => ({

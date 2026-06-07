@@ -4,18 +4,30 @@ import { useEffect, useRef, useState } from 'react'
 import { MENU_DATA } from './menubar.data'
 import MenuBarItem from './MenuBarItem'
 
+// Ask the native shell (CEF) to act on the window. No-op in a normal browser.
+function nativeWindow(method: string) {
+  if (typeof window !== 'undefined' && typeof window.cefQuery === 'function') {
+    window.cefQuery({
+      request: JSON.stringify({ method }),
+      onSuccess: () => {},
+      onFailure: () => {},
+    })
+  }
+}
+
 type WindowControl = {
   id: string
   label: string
   symbol: string
+  method: string
   hoverBg: string
   hoverColor: string
 }
 
 const WINDOW_CONTROLS: WindowControl[] = [
-  { id: 'min', label: 'Minimize', symbol: '─', hoverBg: '#3a3a3a', hoverColor: '#8a8a8a' },
-  { id: 'max', label: 'Maximize', symbol: '□', hoverBg: '#3a3a3a', hoverColor: '#8a8a8a' },
-  { id: 'close', label: 'Close', symbol: '✕', hoverBg: '#e81123', hoverColor: '#ffffff' },
+  { id: 'min', label: 'Minimize', symbol: '─', method: 'minimizeWindow', hoverBg: '#3a3a3a', hoverColor: '#8a8a8a' },
+  { id: 'max', label: 'Maximize', symbol: '□', method: 'toggleMaximizeWindow', hoverBg: '#3a3a3a', hoverColor: '#8a8a8a' },
+  { id: 'close', label: 'Close', symbol: '✕', method: 'closeWindow', hoverBg: '#e81123', hoverColor: '#ffffff' },
 ]
 
 function WindowButton({ control }: { control: WindowControl }) {
@@ -24,6 +36,7 @@ function WindowButton({ control }: { control: WindowControl }) {
     <button
       type="button"
       aria-label={control.label}
+      onClick={() => nativeWindow(control.method)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -113,7 +126,18 @@ export default function MenuBar() {
         />
       ))}
 
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+      {/* Draggable region — the empty space acts like a native title bar:
+          drag to move the window, double-click to maximize/restore. (Native
+          shell only; no-op in a browser.) */}
+      <div
+        onMouseDown={(e) => {
+          if (e.button === 0) nativeWindow('startWindowDrag')
+        }}
+        onDoubleClick={() => nativeWindow('toggleMaximizeWindow')}
+        style={{ flex: 1, alignSelf: 'stretch' }}
+      />
+
+      <div style={{ display: 'flex', alignItems: 'center' }}>
         {WINDOW_CONTROLS.map((control) => (
           <WindowButton key={control.id} control={control} />
         ))}
