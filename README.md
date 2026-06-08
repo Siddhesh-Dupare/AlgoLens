@@ -89,3 +89,8 @@ The AI features use **Claude** or **Gemini**. Add a key in **Settings** (gear
 icon). Keys are stored in `sessionStorage` (`algolens_api_key` /
 `algolens_gemini_key`); Gemini is preferred when both are set. Everything else
 works without a key — AI only enhances, it never gates.
+
+## License
+
+MIT — see [LICENSE](../LICENSE). Third-party components retain their own
+licenses; see [THIRD-PARTY-NOTICES.txt](../THIRD-PARTY-NOTICES.txt).
