@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { Tree } from 'react-arborist'
-import type { NodeApi, TreeApi } from 'react-arborist'
-import { useState, useEffect, useRef } from 'react'
-import { FolderOpen, ChevronDown, FilePlus, FolderPlus } from 'lucide-react'
-import type { FileNode, ContextMenuState } from './explorer.types'
+import { Tree } from "react-arborist";
+import type { NodeApi, TreeApi } from "react-arborist";
+import { useState, useEffect, useRef } from "react";
+import { FolderOpen, ChevronDown, FilePlus, FolderPlus } from "lucide-react";
+import type { FileNode, ContextMenuState } from "./explorer.types";
 import {
   openFolder,
   createNewFile,
@@ -12,62 +12,64 @@ import {
   deleteFileOrFolder,
   renameFile,
   getLanguageFromFilename,
-} from './filesystemUtils'
-import FileTreeNode from './FileTreeNode'
-import FileExplorerContextMenu from './FileExplorerContextMenu'
+} from "./filesystemUtils";
+import FileTreeNode from "./FileTreeNode";
+import FileExplorerContextMenu from "./FileExplorerContextMenu";
+
+import { Button } from "@/components/ui/button";
 
 interface FileExplorerProps {
-  onFileSelect: (file: FileNode) => void
+  onFileSelect: (file: FileNode) => void;
 }
 
 // ---- Immutable tree helpers -------------------------------------------------
 
 function findNodeById(tree: FileNode[], id: string): FileNode | null {
   for (const node of tree) {
-    if (node.id === id) return node
+    if (node.id === id) return node;
     if (node.children) {
-      const found = findNodeById(node.children, id)
-      if (found) return found
+      const found = findNodeById(node.children, id);
+      if (found) return found;
     }
   }
-  return null
+  return null;
 }
 
 function insertChild(
   tree: FileNode[],
   parentId: string | null,
   rootName: string | null,
-  newNode: FileNode
+  newNode: FileNode,
 ): FileNode[] {
   if (parentId === null || parentId === rootName) {
-    return [...tree, newNode]
+    return [...tree, newNode];
   }
   return tree.map((node) => {
     if (node.id === parentId) {
-      return { ...node, children: [...(node.children ?? []), newNode] }
+      return { ...node, children: [...(node.children ?? []), newNode] };
     }
     if (node.children) {
       return {
         ...node,
         children: insertChild(node.children, parentId, rootName, newNode),
-      }
+      };
     }
-    return node
-  })
+    return node;
+  });
 }
 
 function updateNodeById(
   tree: FileNode[],
   id: string,
-  patch: Partial<FileNode>
+  patch: Partial<FileNode>,
 ): FileNode[] {
   return tree.map((node) => {
-    if (node.id === id) return { ...node, ...patch }
+    if (node.id === id) return { ...node, ...patch };
     if (node.children) {
-      return { ...node, children: updateNodeById(node.children, id, patch) }
+      return { ...node, children: updateNodeById(node.children, id, patch) };
     }
-    return node
-  })
+    return node;
+  });
 }
 
 function removeNodeById(tree: FileNode[], id: string): FileNode[] {
@@ -76,100 +78,105 @@ function removeNodeById(tree: FileNode[], id: string): FileNode[] {
     .map((node) =>
       node.children
         ? { ...node, children: removeNodeById(node.children, id) }
-        : node
-    )
+        : node,
+    );
 }
 
 export default function FileExplorer({ onFileSelect }: FileExplorerProps) {
-  const [rootName, setRootName] = useState<string | null>(null)
+  const [rootName, setRootName] = useState<string | null>(null);
   const [rootHandle, setRootHandle] =
-    useState<FileSystemDirectoryHandle | null>(null)
-  const [fileTree, setFileTree] = useState<FileNode[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-
-  const [openHovered, setOpenHovered] = useState(false)
-  const [newFileHovered, setNewFileHovered] = useState(false)
-  const [newFolderHovered, setNewFolderHovered] = useState(false)
-  const [emptyBtnHovered, setEmptyBtnHovered] = useState(false)
+    useState<FileSystemDirectoryHandle | null>(null);
+  const [fileTree, setFileTree] = useState<FileNode[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     isOpen: false,
     x: 0,
     y: 0,
     node: null,
-  })
+  });
 
   const [size, setSize] = useState<{ width: number; height: number }>({
     width: 240,
     height: 500,
-  })
-  const treeContainerRef = useRef<HTMLDivElement>(null)
-  const treeRef = useRef<TreeApi<FileNode> | null>(null)
+  });
+  const treeContainerRef = useRef<HTMLDivElement>(null);
+  const treeRef = useRef<TreeApi<FileNode> | null>(null);
 
   useEffect(() => {
-    const el = treeContainerRef.current
-    if (!el) return
+    const el = treeContainerRef.current;
+    if (!el) return;
     const update = () =>
-      setSize({ width: el.clientWidth, height: el.clientHeight })
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [fileTree.length, isLoading])
+      setSize({ width: el.clientWidth, height: el.clientHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fileTree.length, isLoading]);
 
   const handleOpenFolder = async () => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const result = await openFolder()
+      const result = await openFolder();
       if (result) {
-        setRootName(result.name)
-        setRootHandle(result.handle)
-        setFileTree(result.children)
-        setSelectedId(null)
+        setRootName(result.name);
+        setRootHandle(result.handle);
+        setFileTree(result.children);
+        setSelectedId(null);
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
+
+  // Let the File → Open Folder menu item trigger the same picker. The event is
+  // dispatched synchronously from the menu click, so the browser's user-gesture
+  // requirement for showDirectoryPicker() is preserved.
+  useEffect(() => {
+    const onOpenFolder = () => handleOpenFolder();
+    window.addEventListener("algolens:open-folder", onOpenFolder);
+    return () =>
+      window.removeEventListener("algolens:open-folder", onOpenFolder);
+  }, []);
 
   const handleSelect = (nodes: NodeApi<FileNode>[]) => {
-    const node = nodes[0]
-    if (node && node.data.type === 'file' && !node.data.isNew) {
-      setSelectedId(node.data.id)
-      onFileSelect(node.data)
+    const node = nodes[0];
+    if (node && node.data.type === "file" && !node.data.isNew) {
+      setSelectedId(node.data.id);
+      onFileSelect(node.data);
     }
-  }
+  };
 
   const getParentDirHandle = (
-    parentId?: string | null
+    parentId?: string | null,
   ): FileSystemDirectoryHandle | null => {
-    if (!parentId || parentId === rootName) return rootHandle
-    return findNodeById(fileTree, parentId)?.dirHandle ?? null
-  }
+    if (!parentId || parentId === rootName) return rootHandle;
+    return findNodeById(fileTree, parentId)?.dirHandle ?? null;
+  };
 
   // react-arborist create: insert a placeholder, then it enters edit mode.
   const handleCreate = ({
     parentId,
     type,
   }: {
-    parentId: string | null
-    type: 'internal' | 'leaf'
+    parentId: string | null;
+    type: "internal" | "leaf";
   }) => {
     const tempId = `__new__/${Date.now()}/${Math.random()
       .toString(36)
-      .slice(2, 6)}`
+      .slice(2, 6)}`;
     const newNode: FileNode = {
       id: tempId,
-      name: '',
-      type: type === 'internal' ? 'folder' : 'file',
-      parentId: parentId ?? rootName ?? '',
+      name: "",
+      type: type === "internal" ? "folder" : "file",
+      parentId: parentId ?? rootName ?? "",
       isNew: true,
-      children: type === 'internal' ? [] : undefined,
-    }
-    setFileTree((prev) => insertChild(prev, parentId, rootName, newNode))
-    return { id: tempId }
-  }
+      children: type === "internal" ? [] : undefined,
+    };
+    setFileTree((prev) => insertChild(prev, parentId, rootName, newNode));
+    return { id: tempId };
+  };
 
   // react-arborist rename submit: finalize a new node, or rename an existing one.
   const handleRename = async ({
@@ -177,25 +184,26 @@ export default function FileExplorer({ onFileSelect }: FileExplorerProps) {
     name,
     node,
   }: {
-    id: string
-    name: string
-    node: NodeApi<FileNode>
+    id: string;
+    name: string;
+    node: NodeApi<FileNode>;
   }) => {
-    const data = node.data
-    const base = data.parentId && data.parentId !== '' ? data.parentId : rootName
-    const realId = `${base}/${name}`
-    const parentDir = getParentDirHandle(data.parentId)
+    const data = node.data;
+    const base =
+      data.parentId && data.parentId !== "" ? data.parentId : rootName;
+    const realId = `${base}/${name}`;
+    const parentDir = getParentDirHandle(data.parentId);
 
     if (data.isNew) {
       if (!parentDir) {
-        setFileTree((prev) => removeNodeById(prev, id))
-        return
+        setFileTree((prev) => removeNodeById(prev, id));
+        return;
       }
-      if (data.type === 'folder') {
-        const dh = await createNewFolder(parentDir, name)
+      if (data.type === "folder") {
+        const dh = await createNewFolder(parentDir, name);
         if (!dh) {
-          setFileTree((prev) => removeNodeById(prev, id))
-          return
+          setFileTree((prev) => removeNodeById(prev, id));
+          return;
         }
         setFileTree((prev) =>
           updateNodeById(prev, id, {
@@ -204,13 +212,13 @@ export default function FileExplorer({ onFileSelect }: FileExplorerProps) {
             isNew: false,
             dirHandle: dh,
             children: [],
-          })
-        )
+          }),
+        );
       } else {
-        const fh = await createNewFile(parentDir, name)
+        const fh = await createNewFile(parentDir, name);
         if (!fh) {
-          setFileTree((prev) => removeNodeById(prev, id))
-          return
+          setFileTree((prev) => removeNodeById(prev, id));
+          return;
         }
         setFileTree((prev) =>
           updateNodeById(prev, id, {
@@ -219,276 +227,160 @@ export default function FileExplorer({ onFileSelect }: FileExplorerProps) {
             isNew: false,
             handle: fh,
             language: getLanguageFromFilename(name),
-          })
-        )
+          }),
+        );
       }
-      return
+      return;
     }
 
     // Rename existing node.
-    if (data.type === 'folder') {
-      window.alert('Folder rename is not supported yet.')
-      return
+    if (data.type === "folder") {
+      window.alert("Folder rename is not supported yet.");
+      return;
     }
-    if (!parentDir) return
-    const ok = await renameFile(parentDir, data.name, name)
-    if (!ok) return
+    if (!parentDir) return;
+    const ok = await renameFile(parentDir, data.name, name);
+    if (!ok) return;
     const newHandle = await parentDir
       .getFileHandle(name)
-      .catch(() => undefined)
+      .catch(() => undefined);
     setFileTree((prev) =>
       updateNodeById(prev, id, {
         id: realId,
         name,
         handle: newHandle ?? data.handle,
         language: getLanguageFromFilename(name),
-      })
-    )
-  }
+      }),
+    );
+  };
 
   // react-arborist delete: remove from disk + state, and close any open tabs.
-  const handleTreeDelete = async ({ nodes }: { nodes: NodeApi<FileNode>[] }) => {
+  const handleTreeDelete = async ({
+    nodes,
+  }: {
+    nodes: NodeApi<FileNode>[];
+  }) => {
     for (const node of nodes) {
-      const data = node.data
-      const parentDir = getParentDirHandle(data.parentId)
+      const data = node.data;
+      const parentDir = getParentDirHandle(data.parentId);
       if (parentDir) {
-        await deleteFileOrFolder(parentDir, data.name, data.type === 'folder')
+        await deleteFileOrFolder(parentDir, data.name, data.type === "folder");
       }
       window.dispatchEvent(
-        new CustomEvent('algolens:file-deleted', { detail: { id: data.id } })
-      )
-      setFileTree((prev) => removeNodeById(prev, data.id))
+        new CustomEvent("algolens:file-deleted", { detail: { id: data.id } }),
+      );
+      setFileTree((prev) => removeNodeById(prev, data.id));
     }
-  }
+  };
 
   const handleCancelNew = (id: string) => {
-    setFileTree((prev) => removeNodeById(prev, id))
-  }
+    setFileTree((prev) => removeNodeById(prev, id));
+  };
 
   // ---- Context menu ---------------------------------------------------------
 
   const handleContextMenu = (e: React.MouseEvent, node: FileNode) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setContextMenu({ isOpen: true, x: e.clientX, y: e.clientY, node })
-  }
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ isOpen: true, x: e.clientX, y: e.clientY, node });
+  };
 
   const closeContextMenu = () =>
-    setContextMenu({ isOpen: false, x: 0, y: 0, node: null })
+    setContextMenu({ isOpen: false, x: 0, y: 0, node: null });
 
   const handleContextDelete = (node: FileNode) => {
     const confirmed = window.confirm(
-      `Delete ${node.name}? This cannot be undone.`
-    )
-    if (confirmed) treeRef.current?.delete(node.id)
-  }
+      `Delete ${node.name}? This cannot be undone.`,
+    );
+    if (confirmed) treeRef.current?.delete(node.id);
+  };
 
   return (
-    <div
-      style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#1e1e1e',
-        userSelect: 'none',
-        overflow: 'hidden',
-      }}
-    >
+    <div className="h-full w-full flex flex-col bg-neutral-900 select-none overflow-hidden">
       {/* Header */}
-      <div
-        style={{
-          height: 35,
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 8px 0 12px',
-          background: '#1e1e1e',
-          gap: 2,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            color: '#bbbbbb',
-            flex: 1,
-          }}
-        >
+      <div className="h-8 pr-2 pl-3 shrink-0 flex items-center bg-neutral-900 gap-2">
+        <span className="flex-1 text-xs font-semibold tracking-tighter text-neutral-300">
           EXPLORER
         </span>
 
-        <button
-          type="button"
+        <Button
           aria-label="New File"
           title="New File"
-          onClick={() => treeRef.current?.create({ type: 'leaf', parentId: null })}
-          onMouseEnter={() => setNewFileHovered(true)}
-          onMouseLeave={() => setNewFileHovered(false)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: newFileHovered ? '#2a2d2e' : 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 4,
-            borderRadius: 3,
-            color: newFileHovered ? '#cccccc' : '#8a8a8a',
-          }}
+          size="icon-sm"
+          variant="ghost"
+          onClick={() =>
+            treeRef.current?.create({ type: "leaf", parentId: null })
+          }
+          className="flex items-center justify-center cursor-pointer p-1 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-neutral-300"
         >
           <FilePlus size={14} />
-        </button>
+        </Button>
 
-        <button
-          type="button"
+        <Button
           aria-label="New Folder"
           title="New Folder"
+          size="icon-sm"
+          variant="ghost"
           onClick={() =>
-            treeRef.current?.create({ type: 'internal', parentId: null })
+            treeRef.current?.create({ type: "internal", parentId: null })
           }
-          onMouseEnter={() => setNewFolderHovered(true)}
-          onMouseLeave={() => setNewFolderHovered(false)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: newFolderHovered ? '#2a2d2e' : 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 4,
-            borderRadius: 3,
-            color: newFolderHovered ? '#cccccc' : '#8a8a8a',
-          }}
+          className="flex items-center justify-center cursor-pointer p-1 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-neutral-300"
         >
           <FolderPlus size={14} />
-        </button>
+        </Button>
 
-        <button
-          type="button"
+        <Button
           aria-label="Open folder"
           title="Open Folder"
+          size="icon-sm"
+          variant="ghost"
           onClick={handleOpenFolder}
-          onMouseEnter={() => setOpenHovered(true)}
-          onMouseLeave={() => setOpenHovered(false)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: openHovered ? '#2a2d2e' : 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 4,
-            borderRadius: 3,
-            color: openHovered ? '#cccccc' : '#8a8a8a',
-          }}
+          className="flex items-center justify-center cursor-pointer p-1 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-neutral-300"
         >
           <FolderOpen size={15} />
-        </button>
+        </Button>
       </div>
 
       {/* Body */}
       <div
         ref={treeContainerRef}
-        className="file-explorer-scroll"
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
+        className="file-explorer-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex-col"
       >
         {isLoading ? (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: 80,
-            }}
-          >
-            <div
-              style={{
-                width: 16,
-                height: 16,
-                border: '2px solid #333',
-                borderTopColor: '#007acc',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
-              }}
-            />
+          <div className="h-20 flex items-center justify-center">
+            <div className="w-4 h-4 border-2 border-neutral-800 border-t-sky-600 rounded-lg animate-spin" />
           </div>
         ) : rootName === null ? (
-          <div style={{ padding: '20px 16px' }}>
-            <div style={{ fontSize: 12, color: '#6a6a6a', marginBottom: 8 }}>
-              No folder open
-            </div>
-            <button
-              type="button"
+          <div className="px-5 py-4">
+            <div className="text-sm text-neutral-600 mb-3">No folder open</div>
+            <Button
               onClick={handleOpenFolder}
-              onMouseEnter={() => setEmptyBtnHovered(true)}
-              onMouseLeave={() => setEmptyBtnHovered(false)}
-              style={{
-                fontSize: 12,
-                color: '#cccccc',
-                background: emptyBtnHovered ? '#2a2d2e' : 'transparent',
-                border: '1px solid #3c3c3c',
-                borderRadius: 4,
-                padding: '6px 12px',
-                cursor: 'pointer',
-                width: '100%',
-              }}
+              variant="outline"
+              className="w-full py-1.5 px-3 text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800 rounded-lg cursor-pointer"
             >
               Open Folder
-            </button>
+            </Button>
           </div>
         ) : (
           <>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                height: 24,
-                padding: '0 8px',
-                cursor: 'pointer',
-                flexShrink: 0,
-              }}
-            >
-              <ChevronDown size={14} color="#8a8a8a" style={{ flexShrink: 0 }} />
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: '0.06em',
-                  color: '#bbbbbb',
-                  textTransform: 'uppercase',
-                  marginLeft: 4,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+            <div className="flex h-5 px-2 py-2 items-center cursor-pointer shrink-0">
+              <ChevronDown
+                size={14}
+                color="#8a8a8a"
+                style={{ flexShrink: 0 }}
+              />
+              <span className="text-base font-semibold text-neutral-300 tracking-tighter uppercase ml-1 overflow-hidden text-ellipsis whitespace-nowrap">
                 {rootName}
               </span>
             </div>
 
             {fileTree.length === 0 && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: '#5a5a5a',
-                  padding: '4px 8px 4px 24px',
-                  flexShrink: 0,
-                }}
-              >
+              <div className="text-md text-neutral-600 px-1 pl-6 pr-2">
                 Empty folder — use the + buttons to add files.
               </div>
             )}
 
-            <div style={{ flex: 1, minHeight: 0 }}>
+            <div className="flex-1 min-h-0">
               <Tree<FileNode>
                 ref={treeRef}
                 data={fileTree}
@@ -525,10 +417,10 @@ export default function FileExplorer({ onFileSelect }: FileExplorerProps) {
           node={contextMenu.node}
           onClose={closeContextMenu}
           onNewFile={(parentId) =>
-            treeRef.current?.create({ type: 'leaf', parentId })
+            treeRef.current?.create({ type: "leaf", parentId })
           }
           onNewFolder={(parentId) =>
-            treeRef.current?.create({ type: 'internal', parentId })
+            treeRef.current?.create({ type: "internal", parentId })
           }
           onRename={(node) => treeRef.current?.edit(node.id)}
           onDelete={handleContextDelete}
@@ -536,5 +428,5 @@ export default function FileExplorer({ onFileSelect }: FileExplorerProps) {
         />
       )}
     </div>
-  )
+  );
 }
