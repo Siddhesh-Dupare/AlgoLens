@@ -1107,7 +1107,10 @@ export default function Editor() {
               transition: 'width 200ms ease',
             }}
           >
-            <FileExplorer onFileSelect={handleFileSelect} />
+            <FileExplorer
+              onFileSelect={handleFileSelect}
+              activeFileId={activeTabId}
+            />
           </div>
 
           {/* Resize handle — only when explorer visible */}

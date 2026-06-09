@@ -25,21 +25,33 @@ body {
     height: 100%;
 }
 
+/* Dark/black scrollbar for the file explorer (and anything using this class). */
+.file-explorer-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #2e2e2e #0a0a0a;
+}
+
 .file-explorer-scroll::-webkit-scrollbar {
-    width: 6px;
+    width: 10px;
+    height: 10px;
 }
 
 .file-explorer-scroll::-webkit-scrollbar-track {
-    background: transparent;
+    background: #0a0a0a;
 }
 
 .file-explorer-scroll::-webkit-scrollbar-thumb {
-    background: #424242;
-    border-radius: 3px;
+    background: #2e2e2e;
+    border: 2px solid #0a0a0a;
+    border-radius: 6px;
 }
 
 .file-explorer-scroll::-webkit-scrollbar-thumb:hover {
-    background: #555555;
+    background: #3f3f3f;
+}
+
+.file-explorer-scroll::-webkit-scrollbar-corner {
+    background: #0a0a0a;
 }
 
 @keyframes spin {
