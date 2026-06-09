@@ -16,7 +16,11 @@ import type {
 } from './toolbar/toolbar.types'
 import type { FileNode } from './explorer/explorer.types'
 import type { TabItem } from './tabs/tabs.types'
-import { readFileContent, getMonacoLanguage } from './explorer/filesystemUtils'
+import {
+  readFileContent,
+  getMonacoLanguage,
+  getLanguageFromFilename,
+} from './explorer/filesystemUtils'
 import { executionClient } from '@/lib/executionClient'
 import type { TraceFrame as ServerTraceFrame } from '@/lib/executionTypes'
 import { useTraceStore } from '@/store/useTraceStore'
@@ -299,6 +303,41 @@ export default function Editor() {
     )
   }, [])
 
+  // ---- New untitled file (File → New File) ----------------------------------
+  // Opens an in-memory "Untitled-N" tab you can type into immediately. It has no
+  // disk handle; Run/Debug stay blocked until it's saved (Ctrl+S → localStorage).
+  const untitledCounterRef = useRef(0)
+
+  const createUntitledTab = useCallback(() => {
+    untitledCounterRef.current += 1
+    const n = untitledCounterRef.current
+    const id = `untitled-${Date.now()}-${n}`
+    const name = `Untitled-${n}`
+    const lang = currentLanguageRef.current
+    const newTab: TabItem = {
+      id,
+      name,
+      language: lang,
+      content: '',
+      isDirty: false,
+      savedContent: '',
+      isUntitled: true,
+      savedToLocal: false,
+    }
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(id)
+    setActiveLanguage(lang)
+    setActiveFileName(name)
+    dispatchContent('')
+    dispatchLanguage(lang)
+  }, [])
+
+  useEffect(() => {
+    const onFileNew = () => createUntitledTab()
+    window.addEventListener('algolens:file-new', onFileNew)
+    return () => window.removeEventListener('algolens:file-new', onFileNew)
+  }, [createUntitledTab])
+
   // ---- File save / dirty tracking -------------------------------------------
 
   // Mirror user edits into the active tab and recompute its dirty flag.
@@ -328,7 +367,73 @@ export default function Editor() {
   const saveActiveFile = useCallback(async () => {
     if (!activeTabId) return
     const tab = tabs.find((t) => t.id === activeTabId)
-    if (!tab || !tab.handle) return
+    if (!tab) return
+
+    // Untitled buffers have no disk handle — "Save" is a Save As: ask the user
+    // where to put the file and which name/extension via the native picker, then
+    // turn the tab into a real disk-backed file (which also unlocks Run/Debug).
+    if (tab.isUntitled || !tab.handle) {
+      if (typeof window.showSaveFilePicker !== 'function') {
+        terminalRef.current?.addLine(
+          'error',
+          'Saving is not supported in this browser. Use the desktop app or a Chromium-based browser.'
+        )
+        return
+      }
+      const ext: Record<string, string> = {
+        python: 'py',
+        javascript: 'js',
+        typescript: 'ts',
+        cpp: 'cpp',
+        c: 'c',
+        java: 'java',
+      }
+      const suggestedName = `untitled.${ext[tab.language] ?? 'txt'}`
+
+      let handle: FileSystemFileHandle
+      try {
+        // Must be the first await so the user-gesture (Ctrl+S / click) still holds.
+        handle = await window.showSaveFilePicker({ suggestedName })
+      } catch (err) {
+        // AbortError = user cancelled the dialog; anything else is a real error.
+        if ((err as DOMException)?.name !== 'AbortError') {
+          terminalRef.current?.addLine('error', `Could not save: ${err}`)
+        }
+        return
+      }
+      try {
+        const writable = await handle.createWritable()
+        await writable.write(tab.content)
+        await writable.close()
+      } catch (err) {
+        terminalRef.current?.addLine('error', `Failed to save: ${err}`)
+        return
+      }
+
+      const newName = handle.name
+      const newLang = getMonacoLanguage(getLanguageFromFilename(newName))
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId
+            ? {
+                ...t,
+                name: newName,
+                handle,
+                language: newLang,
+                isUntitled: false,
+                savedToLocal: true,
+                isDirty: false,
+                savedContent: t.content,
+              }
+            : t
+        )
+      )
+      setActiveFileName(newName)
+      setActiveLanguage(newLang)
+      dispatchLanguage(newLang)
+      terminalRef.current?.addLine('success', `Saved ${newName}`)
+      return
+    }
 
     try {
       const writable = await tab.handle.createWritable()
@@ -575,6 +680,16 @@ export default function Editor() {
     const tab = tabs.find((t) => t.id === activeTabId)
     if (!tab) return
 
+    // Block running an unsaved untitled buffer until it's saved.
+    if (tab.isUntitled && !tab.savedToLocal) {
+      setIsTerminalVisible(true)
+      terminalRef.current?.addLine(
+        'warning',
+        'Save this file before running — press Ctrl+S to save the untitled file first.'
+      )
+      return
+    }
+
     setMode('running')
     setStatusLabel('Running...')
     setStatusVariant('info')
@@ -599,6 +714,16 @@ export default function Editor() {
     if (!activeTabId) return
     const tab = tabs.find((t) => t.id === activeTabId)
     if (!tab) return
+
+    // Block debugging an unsaved untitled buffer until it's saved.
+    if (tab.isUntitled && !tab.savedToLocal) {
+      setIsTerminalVisible(true)
+      terminalRef.current?.addLine(
+        'warning',
+        'Save this file before debugging — press Ctrl+S to save the untitled file first.'
+      )
+      return
+    }
 
     setMode('debugging')
     setStatusLabel('Debugging...')
